@@ -1,0 +1,27 @@
+# Lior Pozin's Personal Branding Factory
+# =========================================
+# Install with: pip install -r requirements.txt
+
+# Core - LLM orchestration
+langgraph>=0.2.0
+langchain>=0.3.0
+
+# Local LLM
+ollama>=0.4.0
+
+# Search APIs
+google-search-results>=2.4.2   # SerpAPI wrapper
+openai>=1.0.0                   # Grok (X API) via OpenAI-compatible client
+
+# Obsidian vault integration
+PyYAML>=6.0
+
+# Environment variables
+python-dotenv>=1.0.0
+
+# Image generation (optional — for Stable Diffusion XL on Apple M4)
+# Uncomment these if you want local image generation:
+# torch>=2.0.0
+# diffusers>=0.30.0
+# transformers>=4.40.0
+# accelerate>=0.30.0
