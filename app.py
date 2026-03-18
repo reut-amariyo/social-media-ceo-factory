@@ -273,14 +273,14 @@ class BrandingFactoryApp:
         self.root.after(600, self._animate_title)
 
     # ============================================================
-    # Screen 3: Pick an idea
+    # Screen 3: Pick an idea (or write your own)
     # ============================================================
     def _show_idea_selection(self, ideas: list):
         self._clear_main()
 
         title = tk.Label(
             self.main_frame,
-            text="💡  Pick Your Favorite Idea",
+            text="💡  Choose Your Content Direction",
             font=("Helvetica Neue", 18, "bold"),
             fg=COLORS["text"],
             bg=COLORS["bg"],
@@ -289,30 +289,138 @@ class BrandingFactoryApp:
 
         subtitle = tk.Label(
             self.main_frame,
-            text="The agents found 3 content angles. Click the one you want to develop:",
+            text="Pick an AI idea, edit one to make it yours, or write something completely new:",
             font=("Helvetica Neue", 12),
             fg=COLORS["text_dim"],
             bg=COLORS["bg"],
         )
-        subtitle.pack(pady=(0, 15))
+        subtitle.pack(pady=(0, 10))
 
-        # Scrollable area for idea cards
+        # Scrollable area
         canvas = tk.Canvas(self.main_frame, bg=COLORS["bg"], highlightthickness=0)
         scrollbar = ttk.Scrollbar(self.main_frame, orient="vertical", command=canvas.yview)
-        cards_frame = tk.Frame(canvas, bg=COLORS["bg"])
+        self._cards_frame = tk.Frame(canvas, bg=COLORS["bg"])
 
-        cards_frame.bind(
+        self._cards_frame.bind(
             "<Configure>",
             lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
         )
-        canvas.create_window((0, 0), window=cards_frame, anchor="nw")
-        canvas.configure(yscrollcommand=scrollbar.set)
+        canvas.create_window((0, 0), window=self._cards_frame, anchor="nw", tags="inner")
 
+        # Make the inner frame stretch to canvas width
+        def _on_canvas_configure(event):
+            canvas.itemconfig("inner", width=event.width)
+        canvas.bind("<Configure>", _on_canvas_configure)
+
+        canvas.configure(yscrollcommand=scrollbar.set)
         canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
 
+        # ── "Write Your Own" section at the top ──
+        self._create_custom_idea_section(self._cards_frame)
+
+        # ── Separator ──
+        sep_frame = tk.Frame(self._cards_frame, bg=COLORS["bg"], pady=8)
+        sep_frame.pack(fill="x", padx=5)
+        sep_label = tk.Label(
+            sep_frame,
+            text="── or pick one of the AI suggestions below ──",
+            font=("Helvetica Neue", 11),
+            fg=COLORS["text_dim"],
+            bg=COLORS["bg"],
+        )
+        sep_label.pack()
+
+        # ── AI Idea cards ──
         for i, idea in enumerate(ideas):
-            self._create_idea_card(cards_frame, i, idea)
+            self._create_idea_card(self._cards_frame, i, idea)
+
+    def _create_custom_idea_section(self, parent):
+        """A text area where Reut can type/paste her own idea."""
+        card = tk.Frame(
+            parent,
+            bg=COLORS["surface"],
+            padx=15,
+            pady=12,
+            highlightbackground=COLORS["accent"],
+            highlightthickness=2,
+        )
+        card.pack(fill="x", pady=6, padx=5)
+
+        header = tk.Label(
+            card,
+            text="✏️  Write Your Own Idea",
+            font=("Helvetica Neue", 14, "bold"),
+            fg=COLORS["accent"],
+            bg=COLORS["surface"],
+            anchor="w",
+        )
+        header.pack(fill="x")
+
+        hint = tk.Label(
+            card,
+            text="Type a topic, paste a link, or describe what you want to post about:",
+            font=("Helvetica Neue", 11),
+            fg=COLORS["text_dim"],
+            bg=COLORS["surface"],
+            anchor="w",
+        )
+        hint.pack(fill="x", pady=(2, 5))
+
+        self.custom_idea_text = tk.Text(
+            card,
+            font=("Helvetica Neue", 12),
+            bg=COLORS["card"],
+            fg=COLORS["text"],
+            insertbackground=COLORS["text"],
+            relief="flat",
+            height=4,
+            wrap="word",
+            padx=8,
+            pady=6,
+        )
+        self.custom_idea_text.pack(fill="x", pady=(0, 8))
+        self.custom_idea_text.insert("1.0", "")
+        # Placeholder text
+        self.custom_idea_text.insert("1.0", "e.g. I just saw a competitor raise $50M — I want to talk about what real scaling looks like vs. fundraising theater...")
+        self.custom_idea_text.config(fg=COLORS["text_dim"])
+
+        def _on_focus_in(event):
+            if self.custom_idea_text.get("1.0", "end-1c").startswith("e.g."):
+                self.custom_idea_text.delete("1.0", "end")
+                self.custom_idea_text.config(fg=COLORS["text"])
+
+        def _on_focus_out(event):
+            if not self.custom_idea_text.get("1.0", "end-1c").strip():
+                self.custom_idea_text.insert("1.0", "e.g. I just saw a competitor raise $50M — I want to talk about what real scaling looks like vs. fundraising theater...")
+                self.custom_idea_text.config(fg=COLORS["text_dim"])
+
+        self.custom_idea_text.bind("<FocusIn>", _on_focus_in)
+        self.custom_idea_text.bind("<FocusOut>", _on_focus_out)
+
+        btn = tk.Button(
+            card,
+            text="🚀  Use My Idea",
+            font=("Helvetica Neue", 12, "bold"),
+            fg=COLORS["text"],
+            bg=COLORS["accent"],
+            activebackground=COLORS["accent_hover"],
+            activeforeground=COLORS["text"],
+            relief="flat",
+            padx=20,
+            pady=6,
+            cursor="hand2",
+            command=self._on_custom_idea_submitted,
+        )
+        btn.pack(anchor="e")
+
+    def _on_custom_idea_submitted(self):
+        """Called when Reut submits her own idea."""
+        text = self.custom_idea_text.get("1.0", "end-1c").strip()
+        if not text or text.startswith("e.g."):
+            messagebox.showwarning("Empty idea", "Please type your idea first!")
+            return
+        self._use_idea(text, label="Custom")
 
     def _create_idea_card(self, parent, index, idea_text):
         card = tk.Frame(
@@ -349,9 +457,13 @@ class BrandingFactoryApp:
         )
         body.pack(fill="x", pady=(5, 8))
 
-        btn = tk.Button(
-            card,
-            text=f"✅  Select Idea {index + 1}",
+        # Button row: Select as-is | Edit first
+        btn_row = tk.Frame(card, bg=COLORS["card"])
+        btn_row.pack(fill="x")
+
+        select_btn = tk.Button(
+            btn_row,
+            text=f"✅  Use As-Is",
             font=("Helvetica Neue", 12, "bold"),
             fg=COLORS["text"],
             bg=COLORS["accent"],
@@ -361,9 +473,90 @@ class BrandingFactoryApp:
             padx=20,
             pady=6,
             cursor="hand2",
-            command=lambda idx=index: self._on_idea_selected(idx),
+            command=lambda idx=index: self._use_idea(self.ideas[idx], label=f"Idea {idx+1}"),
         )
-        btn.pack(anchor="e")
+        select_btn.pack(side="right", padx=(5, 0))
+
+        edit_btn = tk.Button(
+            btn_row,
+            text=f"✏️  Edit First",
+            font=("Helvetica Neue", 12),
+            fg=COLORS["text"],
+            bg=COLORS["surface"],
+            activebackground=COLORS["card"],
+            activeforeground=COLORS["text"],
+            relief="flat",
+            padx=20,
+            pady=6,
+            cursor="hand2",
+            command=lambda idx=index, c=card, b=body: self._expand_idea_for_editing(idx, c, b, btn_row),
+        )
+        edit_btn.pack(side="right")
+
+    def _expand_idea_for_editing(self, index, card, body_label, btn_row):
+        """Replace the body label with an editable text area."""
+        idea_text = self.ideas[index]
+        body_label.destroy()
+        btn_row.destroy()
+
+        edit_area = tk.Text(
+            card,
+            font=("Helvetica Neue", 12),
+            bg=COLORS["surface"],
+            fg=COLORS["text"],
+            insertbackground=COLORS["text"],
+            relief="flat",
+            height=8,
+            wrap="word",
+            padx=8,
+            pady=6,
+        )
+        edit_area.pack(fill="x", pady=(5, 8))
+        edit_area.insert("1.0", idea_text)
+        edit_area.focus_set()
+
+        new_btn_row = tk.Frame(card, bg=COLORS["card"])
+        new_btn_row.pack(fill="x")
+
+        save_btn = tk.Button(
+            new_btn_row,
+            text="🚀  Use This Version",
+            font=("Helvetica Neue", 12, "bold"),
+            fg=COLORS["text"],
+            bg=COLORS["accent"],
+            activebackground=COLORS["accent_hover"],
+            activeforeground=COLORS["text"],
+            relief="flat",
+            padx=20,
+            pady=6,
+            cursor="hand2",
+            command=lambda: self._use_idea(
+                edit_area.get("1.0", "end-1c").strip(),
+                label=f"Idea {index+1} (edited)"
+            ),
+        )
+        save_btn.pack(side="right")
+
+    def _use_idea(self, idea_text: str, label: str = ""):
+        """Common handler: take the selected/written/edited idea and proceed."""
+        if not idea_text.strip():
+            messagebox.showwarning("Empty idea", "The idea text is empty!")
+            return
+        self.selected_idea = idea_text
+        self.state["selected_idea"] = idea_text
+        self._show_progress_screen()
+        self._log(f"✅ Using: {label}")
+        self._log(f"   {idea_text[:200]}{'...' if len(idea_text) > 200 else ''}")
+
+        # Re-capture stdout for remaining agent calls
+        self._original_stdout = sys.stdout
+        sys.stdout = GUILogWriter(self._log, self._original_stdout)
+        self._start_time = datetime.now()
+        self._tick_timer()
+
+        # Continue the pipeline in background
+        thread = threading.Thread(target=self._run_remaining_agents, daemon=True)
+        thread.start()
 
     # ============================================================
     # Screen 4: Results
@@ -589,23 +782,6 @@ class BrandingFactoryApp:
             self._log(traceback.format_exc())
             self.is_running = False
             self.root.after(0, lambda: messagebox.showerror("Error", str(e)))
-
-    def _on_idea_selected(self, index):
-        """Called when Reut clicks an idea card."""
-        self.selected_idea = self.ideas[index]
-        self.state["selected_idea"] = self.selected_idea
-        self._show_progress_screen()
-        self._log(f"✅ Selected Idea {index + 1}")
-
-        # Re-capture stdout for remaining agent calls
-        self._original_stdout = sys.stdout
-        sys.stdout = GUILogWriter(self._log, self._original_stdout)
-        self._start_time = datetime.now()
-        self._tick_timer()
-
-        # Continue the pipeline in background
-        thread = threading.Thread(target=self._run_remaining_agents, daemon=True)
-        thread.start()
 
     def _restore_stdout(self):
         """Restore original stdout after agent run."""
