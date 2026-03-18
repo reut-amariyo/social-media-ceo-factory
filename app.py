@@ -8,6 +8,7 @@ without touching the terminal.
 
 import os
 import sys
+import io
 import threading
 import tkinter as tk
 from tkinter import ttk, scrolledtext, messagebox
@@ -18,6 +19,36 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from dotenv import load_dotenv
 load_dotenv()
+
+
+# ============================================================
+# Stdout capture — pipes agent print() into the GUI log
+# ============================================================
+class GUILogWriter(io.TextIOBase):
+    """Intercepts sys.stdout so agent print() calls appear in the GUI log."""
+    def __init__(self, callback, original_stdout):
+        super().__init__()
+        self.callback = callback
+        self.original = original_stdout
+
+    def write(self, text):
+        if text and text.strip():
+            self.callback(text.rstrip())
+        # Also write to original stdout (useful if launched from terminal)
+        if self.original:
+            try:
+                self.original.write(text)
+                self.original.flush()
+            except Exception:
+                pass
+        return len(text) if text else 0
+
+    def flush(self):
+        if self.original:
+            try:
+                self.original.flush()
+            except Exception:
+                pass
 
 
 # ============================================================
@@ -160,14 +191,18 @@ class BrandingFactoryApp:
     def _show_progress_screen(self):
         self._clear_main()
 
-        title = tk.Label(
+        self._activity_dots = 0
+        self.progress_title = tk.Label(
             self.main_frame,
             text="🔄  Agents are working...",
             font=("Helvetica Neue", 18, "bold"),
             fg=COLORS["text"],
             bg=COLORS["bg"],
         )
-        title.pack(pady=(20, 10))
+        self.progress_title.pack(pady=(20, 10))
+
+        # Animate dots so Reut sees the app is alive
+        self._animate_title()
 
         # Progress bar
         style = ttk.Style()
@@ -227,6 +262,15 @@ class BrandingFactoryApp:
             self.progress["value"] = value
             self.progress_label.config(text=label)
         self.root.after(0, _update)
+
+    def _animate_title(self):
+        """Pulse the title dots so Reut sees the app is alive."""
+        if not self.is_running:
+            return
+        self._activity_dots = (self._activity_dots % 3) + 1
+        dots = "." * self._activity_dots + " " * (3 - self._activity_dots)
+        self.progress_title.config(text=f"🔄  Agents are working{dots}")
+        self.root.after(600, self._animate_title)
 
     # ============================================================
     # Screen 3: Pick an idea
@@ -435,9 +479,32 @@ class BrandingFactoryApp:
             return
         self.is_running = True
         self._show_progress_screen()
+
+        # Capture agent print() statements into the GUI log
+        self._original_stdout = sys.stdout
+        sys.stdout = GUILogWriter(self._log, self._original_stdout)
+
+        # Start an elapsed-time ticker so Reut sees the app is alive
+        self._start_time = datetime.now()
+        self._tick_timer()
+
         # Run the factory in a background thread so UI stays responsive
         thread = threading.Thread(target=self._run_factory, daemon=True)
         thread.start()
+
+    def _tick_timer(self):
+        """Update the elapsed time in the progress label every second."""
+        if not self.is_running:
+            return
+        elapsed = datetime.now() - self._start_time
+        minutes, seconds = divmod(int(elapsed.total_seconds()), 60)
+        time_str = f"{minutes}:{seconds:02d}"
+        # Append elapsed time to the current progress label text
+        current = self.progress_label.cget("text")
+        # Strip any previous time suffix
+        base = current.split("  •")[0].split(" (")[0]
+        self.progress_label.config(text=f"{base}  •  {time_str} elapsed")
+        self.root.after(1000, self._tick_timer)
 
     def _run_factory(self):
         """Run agents 1-2 (scout + ideator), then wait for idea selection."""
@@ -512,10 +579,14 @@ class BrandingFactoryApp:
 
             # --- Step 4: Show ideas for selection ---
             self._set_progress(50, "💡 Pick your favorite idea...")
+            self._restore_stdout()
             self.root.after(0, lambda: self._show_idea_selection(self.ideas))
 
         except Exception as e:
+            self._restore_stdout()
             self._log(f"\n❌ Error: {e}")
+            import traceback
+            self._log(traceback.format_exc())
             self.is_running = False
             self.root.after(0, lambda: messagebox.showerror("Error", str(e)))
 
@@ -525,9 +596,22 @@ class BrandingFactoryApp:
         self.state["selected_idea"] = self.selected_idea
         self._show_progress_screen()
         self._log(f"✅ Selected Idea {index + 1}")
+
+        # Re-capture stdout for remaining agent calls
+        self._original_stdout = sys.stdout
+        sys.stdout = GUILogWriter(self._log, self._original_stdout)
+        self._start_time = datetime.now()
+        self._tick_timer()
+
         # Continue the pipeline in background
         thread = threading.Thread(target=self._run_remaining_agents, daemon=True)
         thread.start()
+
+    def _restore_stdout(self):
+        """Restore original stdout after agent run."""
+        if hasattr(self, "_original_stdout") and self._original_stdout:
+            sys.stdout = self._original_stdout
+            self._original_stdout = None
 
     def _run_remaining_agents(self):
         """Run agents 3-6 (creator → validator → graphic artist → save)."""
@@ -594,12 +678,16 @@ class BrandingFactoryApp:
             # --- Done! ---
             self._set_progress(100, "🎉 Done!")
             self._log("\n🎉 FACTORY RUN COMPLETE!")
+            self._restore_stdout()
             self.is_running = False
             self.final_state = self.state
             self.root.after(500, lambda: self._show_results_screen(self.state))
 
         except Exception as e:
+            self._restore_stdout()
             self._log(f"\n❌ Error: {e}")
+            import traceback
+            self._log(traceback.format_exc())
             self.is_running = False
             self.root.after(0, lambda: messagebox.showerror("Error", str(e)))
 
