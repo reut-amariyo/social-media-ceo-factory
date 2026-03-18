@@ -1,0 +1,57 @@
+#!/bin/bash
+# ============================================================
+# 🏭 Branding Factory — macOS App Launcher
+# ============================================================
+# This script is the executable inside BrandingFactory.app.
+# It finds the project directory, activates the right Python,
+# and launches the Tkinter GUI.
+# ============================================================
+
+# Resolve the project root (the .app lives inside the project)
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# BrandingFactory.app/Contents/MacOS/BrandingFactory → go up 3 levels
+PROJECT_DIR="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+
+# If the .app was copied elsewhere (e.g., /Applications), check for a saved path
+if [ ! -f "$PROJECT_DIR/app.py" ]; then
+    # Try a saved project path
+    SAVED_PATH="$HOME/.branding-factory-path"
+    if [ -f "$SAVED_PATH" ]; then
+        PROJECT_DIR="$(cat "$SAVED_PATH")"
+    else
+        # Last resort: ask the user via osascript
+        PROJECT_DIR=$(osascript -e 'tell application "System Events" to display dialog "Where is the Branding Factory project folder?" default answer "/Users/'"$USER"'/projects/social-media-ceo-factory" buttons {"OK"} default button "OK"' -e 'text returned of result' 2>/dev/null)
+        if [ -z "$PROJECT_DIR" ] || [ ! -f "$PROJECT_DIR/app.py" ]; then
+            osascript -e 'display alert "Branding Factory" message "Could not find the project folder. Make sure app.py exists in the project directory." as critical'
+            exit 1
+        fi
+        echo "$PROJECT_DIR" > "$SAVED_PATH"
+    fi
+fi
+
+cd "$PROJECT_DIR"
+
+# Load .env if it exists
+if [ -f "$PROJECT_DIR/.env" ]; then
+    export $(grep -v '^#' "$PROJECT_DIR/.env" | xargs)
+fi
+
+# Find the right Python (prefer system python3 with packages installed)
+if command -v python3 &>/dev/null; then
+    PYTHON="python3"
+elif [ -f "$PROJECT_DIR/.venv/bin/python" ]; then
+    PYTHON="$PROJECT_DIR/.venv/bin/python"
+else
+    osascript -e 'display alert "Branding Factory" message "Python 3 not found. Please install Python 3 first." as critical'
+    exit 1
+fi
+
+# Verify required packages exist
+$PYTHON -c "import tkinter" 2>/dev/null
+if [ $? -ne 0 ]; then
+    osascript -e 'display alert "Branding Factory" message "Tkinter is not available in your Python installation. Please install python3-tk." as critical'
+    exit 1
+fi
+
+# Launch the app
+exec $PYTHON "$PROJECT_DIR/app.py"
