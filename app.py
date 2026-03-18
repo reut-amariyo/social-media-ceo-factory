@@ -801,9 +801,9 @@ class BrandingFactoryApp:
             drafts = self.state.get("post_drafts", {})
             self._log(f"   ✅ Generated drafts for {len(drafts)} platforms")
 
-            # --- Step 6: Validator ---
-            self._set_progress(75, "✅ Validator: Checking quality...")
-            self._log("\n✅ VALIDATOR: Running Gatekeeper checks...")
+            # --- Step 6: Validator (agentic — LLM evaluation + hard checks) ---
+            self._set_progress(75, "🛡️ Gatekeeper: Evaluating quality...")
+            self._log("\n🛡️ GATEKEEPER: Two-phase quality control...")
             from branding_factory.agents.validator import run_validator_agent
 
             max_retries = 3
@@ -811,17 +811,28 @@ class BrandingFactoryApp:
                 validator_result = run_validator_agent(self.state)
                 self.state.update(validator_result)
                 validation = self.state.get("validation_results", "")
+                scores = self.state.get("validation_scores", {})
+
+                # Show scores in the log
+                if scores:
+                    avg = sum(scores.values()) / len(scores)
+                    self._log(f"   📊 Gatekeeper scores (avg: {avg:.1f}/5):")
+                    for name, score in scores.items():
+                        bar = "█" * score + "░" * (5 - score)
+                        self._log(f"      {bar} {name}: {score}/5")
 
                 if "FAIL" not in validation:
-                    self._log("   ✅ Validation PASSED!")
+                    self._log("   ✅ Gatekeeper PASSED — drafts are ready!")
                     break
                 elif attempt < max_retries - 1:
-                    self._log(f"   🔄 Retry {attempt + 1}/{max_retries}...")
-                    self._set_progress(75, f"✍️ Creator: Retrying (attempt {attempt + 2})...")
+                    self._log(f"\n   🔄 FAIL → Sending feedback to Creator (retry {attempt + 1}/{max_retries})...")
+                    self._log(f"   📝 Creator will fix: {validation[:200]}...")
+                    self._set_progress(75, f"✍️ Creator: Rewriting with Gatekeeper feedback (attempt {attempt + 2}/{max_retries})...")
                     creator_result = run_creator_agent(self.state)
                     self.state.update(creator_result)
+                    self._log(f"   ✅ Creator submitted revised drafts")
                 else:
-                    self._log("   ⚠️ Max retries reached. Proceeding with current drafts.")
+                    self._log("   ⚠️ Max retries reached. Proceeding with best available drafts.")
 
             # --- Step 7: Graphic Artist ---
             self._set_progress(85, "🎨 Graphic Artist: Generating image...")
