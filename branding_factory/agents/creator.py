@@ -174,10 +174,68 @@ INSTAGRAM_CAPTION: [caption]"""
         preview = text[:80].replace("\n", " ")
         print(f"      📝 {platform}: {preview}...")
 
+    # --- Self-evaluation: Creator checks its own work before sending to Validator ---
+    print("   🔍 Creator self-check: evaluating own drafts...")
+    self_check = _self_evaluate(drafts, ceo_name, voice_dna, selected_idea)
+    if self_check:
+        print(f"   🔄 Self-check found issues — rewriting...")
+        print(f"      📝 {self_check[:150]}...")
+        # Rewrite with self-feedback
+        retry_prompt = prompt + f"""
+
+⚠️ SELF-CHECK: Before submitting, I reviewed my own drafts and found these issues:
+{self_check}
+
+Rewrite ALL drafts fixing these issues. Return in the same format."""
+        content2 = _generate_with_best_llm(retry_prompt, agent_name="Creator (self-fix)")
+        drafts2 = _parse_drafts(content2)
+        if drafts2 and len(drafts2) >= len(drafts):
+            drafts = drafts2
+            print("   ✅ Self-fix applied — improved drafts ready")
+        else:
+            print("   ⏭️ Self-fix parse failed — keeping original drafts")
+    else:
+        print("   ✅ Self-check passed — drafts look good")
+
     return {
         "post_drafts": drafts,
         "iteration_count": state.get("iteration_count", 0) + 1,
     }
+
+
+def _self_evaluate(drafts: dict, ceo_name: str, voice_dna: str, idea: str) -> str | None:
+    """Creator self-evaluates its own drafts. Returns issues found, or None if clean."""
+    combined = "\n\n".join(f"[{k.upper()}]: {v}" for k, v in drafts.items())
+
+    prompt = f"""You just wrote these social media drafts for {ceo_name}. 
+Now step back and evaluate your OWN work critically. Be honest.
+
+VOICE DNA RULES:
+{voice_dna[:1000]}
+
+THE IDEA:
+{idea[:500]}
+
+YOUR DRAFTS:
+{combined}
+
+Check for these common mistakes:
+1. Did I use any banned words (leverage, optimize, hustle, grind, journey, innovative)?
+2. Did I use em dash (—) instead of single dash with space ( - )?
+3. Did I use curly quotes instead of straight quotes?
+4. Does the hook read as ONE line or did I make it a paragraph?
+5. Is there any guru energy / condescending tone?
+6. Did I use numbered steps? If so, are there exactly 3?
+7. Is there a specific time anchor (not vague "years ago")?
+8. Does the X post fit in 280 chars?
+
+If you find ANY issues, list them briefly (max 5 bullet points).
+If everything looks clean, respond with exactly: CLEAN"""
+
+    result = _generate_with_best_llm(prompt, agent_name="Creator self-check")
+    if result.strip().upper() == "CLEAN" or "clean" in result.strip().lower()[:20]:
+        return None
+    return result
 
 
 def _parse_drafts(content: str) -> dict:

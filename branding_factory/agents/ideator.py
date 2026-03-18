@@ -112,7 +112,59 @@ Return exactly 3 ideas numbered 1, 2, 3."""
     print("   🧠 Generating ideas...")
     ideas_text = _generate_with_best_llm(prompt, agent_name="Ideator")
 
-    # Parse into a list of ideas
+    # --- Self-reflection: rank ideas against past performance ---
+    print("   🔍 Ideator: Self-reflecting on idea quality...")
+    if learning_log or past_posts:
+        ranking_prompt = f"""You are a branding strategist. You just generated these 3 content ideas:
+
+{ideas_text}
+
+Now evaluate them against what you know about past performance:
+
+PAST PERFORMANCE DATA:
+{learning_log[:1500]}
+
+EXAMPLES OF SUCCESSFUL PAST POSTS:
+{past_posts_text[:1500]}
+
+For each idea:
+1. How similar is it to content that already performed well? (Similarity is OK if the angle is fresh)
+2. Does it have enough FRICTION to generate comments?
+3. Would the target audience (entrepreneurs, founders, investors) care about this?
+
+RANK the 3 ideas from strongest to weakest. Put the strongest first.
+Return them as:
+RANKED IDEA 1: [paste the full idea text]
+RANKED IDEA 2: [paste the full idea text]  
+RANKED IDEA 3: [paste the full idea text]
+
+Add a one-line RATIONALE after each explaining why it's ranked there."""
+
+        ranked_text = _generate_with_best_llm(ranking_prompt, agent_name="Ideator (ranking)")
+        # Try to parse ranked ideas
+        ranked_ideas = _parse_ranked_ideas(ranked_text)
+        if ranked_ideas and len(ranked_ideas) >= 2:
+            ideas = ranked_ideas
+            print(f"   ✅ Ideas ranked by predicted performance ({len(ideas)} ideas)")
+        else:
+            # Fall back to original parsing
+            ideas = _parse_ideas(ideas_text)
+            print(f"   ⏭️ Ranking parse failed — using original order")
+    else:
+        ideas = _parse_ideas(ideas_text)
+
+    if not ideas:
+        ideas = [ideas_text]
+
+    print(f"   ✅ Generated {len(ideas)} content ideas")
+
+    return {
+        "ideas": ideas,
+    }
+
+
+def _parse_ideas(ideas_text: str) -> list[str]:
+    """Parse numbered ideas from LLM output."""
     ideas = []
     for i in range(1, 4):
         start = ideas_text.find(f"{i}.")
@@ -123,12 +175,22 @@ Return exactly 3 ideas numbered 1, 2, 3."""
             end = ideas_text.find(f"IDEA {i + 1}")
         if start != -1:
             ideas.append(ideas_text[start:end if end != -1 else len(ideas_text)].strip())
+    return ideas
 
-    if not ideas:
-        ideas = [ideas_text]  # Fallback: return full text as single idea
 
-    print(f"   ✅ Generated {len(ideas)} content ideas")
-
-    return {
-        "ideas": ideas,
-    }
+def _parse_ranked_ideas(ranked_text: str) -> list[str]:
+    """Parse ranked ideas from the self-reflection output."""
+    ideas = []
+    for i in range(1, 4):
+        marker = f"RANKED IDEA {i}:"
+        start = ranked_text.find(marker)
+        if start == -1:
+            continue
+        start += len(marker)
+        # Find the next ranked idea or end
+        next_marker = f"RANKED IDEA {i + 1}:"
+        end = ranked_text.find(next_marker) if i < 3 else len(ranked_text)
+        if end == -1:
+            end = len(ranked_text)
+        ideas.append(ranked_text[start:end].strip())
+    return ideas

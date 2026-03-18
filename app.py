@@ -559,37 +559,53 @@ class BrandingFactoryApp:
         thread.start()
 
     # ============================================================
-    # Screen 4: Results
+    # Screen 4: Reut Reviews Final Drafts (Approve / Edit / Redo)
     # ============================================================
-    def _show_results_screen(self, state: dict):
+    def _show_review_screen(self, state: dict):
         self._clear_main()
+        self.is_running = False
 
         title = tk.Label(
             self.main_frame,
-            text="🎉  Drafts Ready!",
+            text="🛑  Review Before Publishing",
             font=("Helvetica Neue", 20, "bold"),
-            fg=COLORS["success"],
+            fg=COLORS["warning"],
             bg=COLORS["bg"],
         )
-        title.pack(pady=(10, 5))
+        title.pack(pady=(10, 3))
 
-        validation = state.get("validation_results", "N/A")
-        iterations = state.get("iteration_count", 0)
-        status_text = f"Validation: {validation}  |  Iterations: {iterations}"
-        status = tk.Label(
+        subtitle = tk.Label(
             self.main_frame,
-            text=status_text,
+            text="Read the drafts, edit if needed, then Approve or ask for a Redo",
+            font=("Helvetica Neue", 12),
+            fg=COLORS["text_dim"],
+            bg=COLORS["bg"],
+        )
+        subtitle.pack(pady=(0, 8))
+
+        # Scores summary
+        scores = state.get("validation_scores", {})
+        if scores:
+            avg = sum(scores.values()) / len(scores)
+            score_text = f"Gatekeeper score: {avg:.1f}/5  |  Iterations: {state.get('iteration_count', 0)}"
+        else:
+            score_text = f"Iterations: {state.get('iteration_count', 0)}"
+        score_label = tk.Label(
+            self.main_frame,
+            text=score_text,
             font=("Helvetica Neue", 11),
             fg=COLORS["text_dim"],
             bg=COLORS["bg"],
         )
-        status.pack(pady=(0, 10))
+        score_label.pack(pady=(0, 8))
 
-        # Draft tabs
+        # Draft tabs (EDITABLE — Reut can modify text before approving)
         drafts = state.get("post_drafts", {})
+        self._review_text_widgets = {}
+
         if drafts:
             notebook = ttk.Notebook(self.main_frame)
-            notebook.pack(fill="both", expand=True, pady=(5, 10))
+            notebook.pack(fill="both", expand=True, pady=(5, 8))
 
             tab_names = {
                 "x": "🐦 X (Twitter)",
@@ -613,21 +629,310 @@ class BrandingFactoryApp:
                 )
                 text_widget.pack(fill="both", expand=True, padx=5, pady=5)
                 text_widget.insert("1.0", content)
+                self._review_text_widgets[key] = text_widget
+
+        # Image preview (if exists)
+        image_path = state.get("image_path", "")
+        if image_path and os.path.isfile(image_path):
+            img_label = tk.Label(
+                self.main_frame,
+                text=f"🖼️  Image: {os.path.basename(image_path)}",
+                font=("Helvetica Neue", 11),
+                fg=COLORS["text_dim"],
+                bg=COLORS["bg"],
+            )
+            img_label.pack(pady=(2, 4))
+
+        # --- Redo notes area ---
+        redo_frame = tk.Frame(self.main_frame, bg=COLORS["bg"])
+        redo_frame.pack(fill="x", pady=(4, 2))
+
+        redo_label = tk.Label(
+            redo_frame,
+            text="📝 Notes for Redo (optional — tell the Creator what to change):",
+            font=("Helvetica Neue", 11),
+            fg=COLORS["text_dim"],
+            bg=COLORS["bg"],
+            anchor="w",
+        )
+        redo_label.pack(fill="x")
+
+        self._redo_notes = tk.Text(
+            redo_frame,
+            font=("Helvetica Neue", 12),
+            bg=COLORS["card"],
+            fg=COLORS["text"],
+            insertbackground=COLORS["text"],
+            relief="flat",
+            height=2,
+            wrap="word",
+            padx=8,
+            pady=4,
+        )
+        self._redo_notes.pack(fill="x", pady=(2, 0))
+
+        # --- Action buttons ---
+        btn_frame = tk.Frame(self.main_frame, bg=COLORS["bg"])
+        btn_frame.pack(fill="x", pady=(8, 0))
+
+        # Approve button (green)
+        approve_btn = tk.Button(
+            btn_frame,
+            text="✅  Approve & Save",
+            font=("Helvetica Neue", 14, "bold"),
+            fg=COLORS["text"],
+            bg=COLORS["success"],
+            activebackground="#27ae60",
+            activeforeground=COLORS["text"],
+            relief="flat",
+            padx=24,
+            pady=8,
+            cursor="hand2",
+            command=self._on_approve,
+        )
+        approve_btn.pack(side="right", padx=(5, 0))
+
+        # Redo button (orange)
+        redo_btn = tk.Button(
+            btn_frame,
+            text="🔄  Redo with Notes",
+            font=("Helvetica Neue", 13, "bold"),
+            fg=COLORS["text"],
+            bg=COLORS["warning"],
+            activebackground="#e67e22",
+            activeforeground=COLORS["text"],
+            relief="flat",
+            padx=20,
+            pady=8,
+            cursor="hand2",
+            command=self._on_redo,
+        )
+        redo_btn.pack(side="right", padx=(5, 0))
+
+        # Start over button (dimmed)
+        restart_btn = tk.Button(
+            btn_frame,
+            text="⏮  Start Over",
+            font=("Helvetica Neue", 12),
+            fg=COLORS["text_dim"],
+            bg=COLORS["surface"],
+            activebackground=COLORS["card"],
+            relief="flat",
+            padx=16,
+            pady=8,
+            cursor="hand2",
+            command=self._show_start_screen,
+        )
+        restart_btn.pack(side="left")
+
+    def _on_approve(self):
+        """Reut approves — collect any edits she made, save, run analyst."""
+        # Collect edits from text widgets
+        for key, widget in self._review_text_widgets.items():
+            edited_text = widget.get("1.0", "end-1c").strip()
+            if edited_text:
+                self.state["post_drafts"][key] = edited_text
+
+        self._show_progress_screen()
+        self._log("✅ Reut APPROVED the drafts!")
+
+        # Check if she edited anything
+        self._log("📂 Saving to Obsidian + running Analyst...")
+        self.is_running = True
+        self._original_stdout = sys.stdout
+        sys.stdout = GUILogWriter(self._log, self._original_stdout)
+        self._start_time = datetime.now()
+        self._tick_timer()
+
+        thread = threading.Thread(target=self._run_save_and_learn, daemon=True)
+        thread.start()
+
+    def _on_redo(self):
+        """Reut wants changes — send her notes back to Creator."""
+        notes = self._redo_notes.get("1.0", "end-1c").strip()
+        if not notes:
+            messagebox.showwarning(
+                "No notes",
+                "Please type what you want changed in the notes box, "
+                "or edit the drafts directly and click Approve."
+            )
+            return
+
+        # Inject Reut's feedback into state
+        self.state["validation_results"] = (
+            f"FAIL:\n"
+            f"REUT'S DIRECT FEEDBACK (highest priority — override all other rules):\n"
+            f"{notes}\n\n"
+            f"Rewrite the drafts following Reut's instructions above."
+        )
+
+        self._show_progress_screen()
+        self._log(f"🔄 Reut requested REDO with notes:")
+        self._log(f"   📝 \"{notes[:200]}\"")
+        self._log("")
+
+        self.is_running = True
+        self._original_stdout = sys.stdout
+        sys.stdout = GUILogWriter(self._log, self._original_stdout)
+        self._start_time = datetime.now()
+        self._tick_timer()
+
+        thread = threading.Thread(target=self._run_redo, daemon=True)
+        thread.start()
+
+    def _run_redo(self):
+        """Re-run Creator with Reut's feedback, then Validator, then review screen."""
+        try:
+            from branding_factory.agents.creator import run_creator_agent
+            from branding_factory.agents.validator import run_validator_agent
+
+            # Creator rewrites with Reut's feedback
+            self._set_progress(40, "✍️ Creator: Rewriting with Reut's feedback...")
+            self._log("✍️ CREATOR: Rewriting based on Reut's notes...")
+            creator_result = run_creator_agent(self.state)
+            self.state.update(creator_result)
+            self._log(f"   ✅ New drafts generated")
+
+            # Validator checks the new drafts
+            self._set_progress(70, "🛡️ Gatekeeper: Checking revised drafts...")
+            self._log("\n🛡️ GATEKEEPER: Evaluating revised drafts...")
+            validator_result = run_validator_agent(self.state)
+            self.state.update(validator_result)
+            validation = self.state.get("validation_results", "")
+            scores = self.state.get("validation_scores", {})
+
+            if scores:
+                avg = sum(scores.values()) / len(scores)
+                self._log(f"   📊 Gatekeeper scores (avg: {avg:.1f}/5)")
+
+            if "FAIL" in validation:
+                self._log("   ⚠️ Gatekeeper has concerns — but Reut gets final say")
+            else:
+                self._log("   ✅ Gatekeeper PASSED")
+
+            self._set_progress(100, "Ready for review")
+            self._restore_stdout()
+            self.is_running = False
+            self.root.after(300, lambda: self._show_review_screen(self.state))
+
+        except Exception as e:
+            self._restore_stdout()
+            self._log(f"\n❌ Error: {e}")
+            import traceback
+            self._log(traceback.format_exc())
+            self.is_running = False
+            self.root.after(0, lambda: messagebox.showerror("Error", str(e)))
+
+    def _run_save_and_learn(self):
+        """After approval: save to Obsidian, run analyst, show final screen."""
+        try:
+            # --- Save to Obsidian ---
+            self._set_progress(40, "📂 Saving to Obsidian...")
+            self._log("\n📂 SAVING TO OBSIDIAN...")
+            from utils.obsidian_io import save_drafts_to_obsidian
+            filepath = save_drafts_to_obsidian(
+                self.state.get("post_drafts", {}),
+                self.state.get("selected_idea", ""),
+                self.state.get("image_path", ""),
+            )
+            if filepath:
+                self._log(f"   ✅ Saved to: {filepath}")
+                self.saved_path = os.path.dirname(filepath)
+            else:
+                self._log("   ⚠️ Saved locally to outputs/")
+                self.saved_path = os.path.join(os.path.dirname(__file__), "outputs")
+
+            # --- Analyst: log what worked ---
+            self._set_progress(70, "📊 Analyst: Learning from this run...")
+            self._log("\n📊 ANALYST: Logging what worked for future runs...")
+            from branding_factory.agents.analyst import run_analyst_agent
+
+            # Build engagement data for the analyst
+            scores = self.state.get("validation_scores", {})
+            avg_score = sum(scores.values()) / len(scores) if scores else 0
+            analyst_data = (
+                f"Run completed: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n"
+                f"Selected idea: {self.state.get('selected_idea', '')[:200]}\n"
+                f"Gatekeeper avg score: {avg_score:.1f}/5\n"
+                f"Iterations needed: {self.state.get('iteration_count', 0)}\n"
+                f"Scores: {scores}\n"
+                f"Result: APPROVED by Reut\n"
+                f"Platforms generated: {', '.join(self.state.get('post_drafts', {}).keys())}\n"
+            )
+            self.state["engagement_data"] = analyst_data
+            analyst_result = run_analyst_agent(self.state)
+            self.state.update(analyst_result)
+            self._log("   ✅ Analyst logged insights for next run")
+
+            # --- Done! ---
+            self._set_progress(100, "🎉 Done!")
+            self._log("\n🎉 FACTORY RUN COMPLETE — Content approved and saved!")
+            self._restore_stdout()
+            self.is_running = False
+            self.final_state = self.state
+            self.root.after(500, lambda: self._show_done_screen(self.state))
+
+        except Exception as e:
+            self._restore_stdout()
+            self._log(f"\n❌ Error: {e}")
+            import traceback
+            self._log(traceback.format_exc())
+            self.is_running = False
+            self.root.after(0, lambda: messagebox.showerror("Error", str(e)))
+
+    # ============================================================
+    # Screen 5: Final Done (after Reut approved & saved)
+    # ============================================================
+    def _show_done_screen(self, state: dict):
+        self._clear_main()
+
+        title = tk.Label(
+            self.main_frame,
+            text="🎉  Published!",
+            font=("Helvetica Neue", 22, "bold"),
+            fg=COLORS["success"],
+            bg=COLORS["bg"],
+        )
+        title.pack(pady=(30, 5))
+
+        info = tk.Label(
+            self.main_frame,
+            text="Drafts saved to Obsidian  •  Analyst logged insights for next run",
+            font=("Helvetica Neue", 13),
+            fg=COLORS["text_dim"],
+            bg=COLORS["bg"],
+        )
+        info.pack(pady=(0, 20))
+
+        scores = state.get("validation_scores", {})
+        if scores:
+            avg = sum(scores.values()) / len(scores)
+            for name, score in scores.items():
+                bar = "█" * score + "░" * (5 - score)
+                s_label = tk.Label(
+                    self.main_frame,
+                    text=f"  {bar}  {name}: {score}/5",
+                    font=("SF Mono", 11),
+                    fg=COLORS["success"] if score >= 4 else COLORS["warning"] if score == 3 else COLORS["accent"],
+                    bg=COLORS["bg"],
+                    anchor="w",
+                )
+                s_label.pack(anchor="w", padx=100)
 
         # Action buttons
         btn_frame = tk.Frame(self.main_frame, bg=COLORS["bg"])
-        btn_frame.pack(fill="x", pady=(5, 0))
+        btn_frame.pack(fill="x", pady=(30, 0), padx=100)
 
         open_btn = tk.Button(
             btn_frame,
             text="📂  Open in Obsidian",
-            font=("Helvetica Neue", 13, "bold"),
+            font=("Helvetica Neue", 14, "bold"),
             fg=COLORS["text"],
             bg=COLORS["card"],
             activebackground=COLORS["accent"],
             relief="flat",
-            padx=20,
-            pady=8,
+            padx=24,
+            pady=10,
             cursor="hand2",
             command=self._open_obsidian,
         )
@@ -636,13 +941,13 @@ class BrandingFactoryApp:
         again_btn = tk.Button(
             btn_frame,
             text="🔄  Run Again",
-            font=("Helvetica Neue", 13, "bold"),
+            font=("Helvetica Neue", 14, "bold"),
             fg=COLORS["text"],
             bg=COLORS["accent"],
             activebackground=COLORS["accent_hover"],
             relief="flat",
-            padx=20,
-            pady=8,
+            padx=24,
+            pady=10,
             cursor="hand2",
             command=self._show_start_screen,
         )
@@ -790,11 +1095,11 @@ class BrandingFactoryApp:
             self._original_stdout = None
 
     def _run_remaining_agents(self):
-        """Run agents 3-6 (creator → validator → graphic artist → save)."""
+        """Run Creator → Validator loop → Graphic Artist → show review screen (Reut decides)."""
         try:
             # --- Step 5: Creator ---
-            self._set_progress(60, "✍️ Creator: Writing drafts in Lior's voice...")
-            self._log("\n✍️ CREATOR: Writing multi-platform drafts...")
+            self._set_progress(55, "✍️ Creator: Writing drafts in Lior's voice...")
+            self._log("\n✍️ CREATOR: Writing multi-platform drafts (with self-check)...")
             from branding_factory.agents.creator import run_creator_agent
             creator_result = run_creator_agent(self.state)
             self.state.update(creator_result)
@@ -802,7 +1107,7 @@ class BrandingFactoryApp:
             self._log(f"   ✅ Generated drafts for {len(drafts)} platforms")
 
             # --- Step 6: Validator (agentic — LLM evaluation + hard checks) ---
-            self._set_progress(75, "🛡️ Gatekeeper: Evaluating quality...")
+            self._set_progress(70, "🛡️ Gatekeeper: Evaluating quality...")
             self._log("\n🛡️ GATEKEEPER: Two-phase quality control...")
             from branding_factory.agents.validator import run_validator_agent
 
@@ -822,20 +1127,20 @@ class BrandingFactoryApp:
                         self._log(f"      {bar} {name}: {score}/5")
 
                 if "FAIL" not in validation:
-                    self._log("   ✅ Gatekeeper PASSED — drafts are ready!")
+                    self._log("   ✅ Gatekeeper PASSED — drafts are ready for Reut!")
                     break
                 elif attempt < max_retries - 1:
                     self._log(f"\n   🔄 FAIL → Sending feedback to Creator (retry {attempt + 1}/{max_retries})...")
                     self._log(f"   📝 Creator will fix: {validation[:200]}...")
-                    self._set_progress(75, f"✍️ Creator: Rewriting with Gatekeeper feedback (attempt {attempt + 2}/{max_retries})...")
+                    self._set_progress(70, f"✍️ Creator: Rewriting with feedback (attempt {attempt + 2}/{max_retries})...")
                     creator_result = run_creator_agent(self.state)
                     self.state.update(creator_result)
                     self._log(f"   ✅ Creator submitted revised drafts")
                 else:
-                    self._log("   ⚠️ Max retries reached. Proceeding with best available drafts.")
+                    self._log("   ⚠️ Max retries reached. Sending to Reut for final call.")
 
             # --- Step 7: Graphic Artist ---
-            self._set_progress(85, "🎨 Graphic Artist: Generating image...")
+            self._set_progress(88, "🎨 Graphic Artist: Generating image...")
             self._log("\n🎨 GRAPHIC ARTIST: Generating branded image...")
             from branding_factory.agents.graphic_artist import run_graphic_agent
             graphic_result = run_graphic_agent(self.state)
@@ -846,29 +1151,12 @@ class BrandingFactoryApp:
             else:
                 self._log("   ⏭️ Skipped (diffusers not installed)")
 
-            # --- Step 8: Save to Obsidian ---
-            self._set_progress(95, "📂 Saving to Obsidian...")
-            self._log("\n📂 SAVING TO OBSIDIAN...")
-            from utils.obsidian_io import save_drafts_to_obsidian
-            filepath = save_drafts_to_obsidian(
-                self.state.get("post_drafts", {}),
-                self.state.get("selected_idea", ""),
-                self.state.get("image_path", ""),
-            )
-            if filepath:
-                self._log(f"   ✅ Saved to: {filepath}")
-                self.saved_path = os.path.dirname(filepath)
-            else:
-                self._log("   ⚠️ Saved locally to outputs/")
-                self.saved_path = os.path.join(os.path.dirname(__file__), "outputs")
-
-            # --- Done! ---
-            self._set_progress(100, "🎉 Done!")
-            self._log("\n🎉 FACTORY RUN COMPLETE!")
+            # --- Step 8: Show review screen (Reut decides: Approve / Edit / Redo) ---
+            self._set_progress(100, "🛑 Ready for Reut's review!")
+            self._log("\n🛑 READY FOR REVIEW — Reut, check the drafts!")
             self._restore_stdout()
             self.is_running = False
-            self.final_state = self.state
-            self.root.after(500, lambda: self._show_results_screen(self.state))
+            self.root.after(500, lambda: self._show_review_screen(self.state))
 
         except Exception as e:
             self._restore_stdout()
