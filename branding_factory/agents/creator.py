@@ -10,8 +10,31 @@ Follows the 12-section style guide:
 10. Ending Patterns  11. Eye-Level Tone  12. Owner Editing Rules
 """
 
+import os
 import ollama
+from openai import OpenAI
 from utils.obsidian_io import get_learning_log, get_past_posts
+
+XAI_API_KEY = os.getenv("XAI_API_KEY")
+
+
+def _generate_with_best_llm(prompt: str, agent_name: str = "Creator") -> str:
+    """Use Grok (fast, remote) if available, otherwise fall back to Ollama (local)."""
+    if XAI_API_KEY:
+        print(f"   🧠 {agent_name}: Generating with Grok-3 (remote — fast)...")
+        try:
+            client = OpenAI(api_key=XAI_API_KEY, base_url="https://api.x.ai/v1")
+            response = client.chat.completions.create(
+                model="grok-3",
+                messages=[{"role": "user", "content": prompt}],
+            )
+            return response.choices[0].message.content
+        except Exception as e:
+            print(f"   ⚠️  Grok failed ({e}), falling back to Ollama...")
+
+    print(f"   🧠 {agent_name}: Generating with Ollama llama3 (local — slower)...")
+    response = ollama.generate(model="llama3", prompt=prompt)
+    return response["response"]
 
 
 # Lior's vocabulary rules — embedded from voice-dna.md
@@ -140,9 +163,8 @@ Slide 4: [text]
 Slide 5: [text]
 INSTAGRAM_CAPTION: [caption]"""
 
-    print("   🧠 Generating drafts with Ollama (llama3)...")
-    response = ollama.generate(model="llama3", prompt=prompt)
-    content = response["response"]
+    print("   🧠 Generating drafts...")
+    content = _generate_with_best_llm(prompt, agent_name="Creator")
 
     # Parse the response into platform-specific drafts
     drafts = _parse_drafts(content)

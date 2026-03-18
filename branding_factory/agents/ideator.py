@@ -5,8 +5,31 @@ Filters scout's trends through Brand DNA, proposes 3 content angles.
 Uses Voice DNA + ICP + learning log for brand-aligned ideation.
 """
 
+import os
 import ollama
+from openai import OpenAI
 from utils.obsidian_io import get_learning_log, get_brand_dna, get_past_posts
+
+XAI_API_KEY = os.getenv("XAI_API_KEY")
+
+
+def _generate_with_best_llm(prompt: str, agent_name: str = "Ideator") -> str:
+    """Use Grok (fast, remote) if available, otherwise fall back to Ollama (local)."""
+    if XAI_API_KEY:
+        print(f"   🧠 {agent_name}: Generating with Grok-3 (remote — fast)...")
+        try:
+            client = OpenAI(api_key=XAI_API_KEY, base_url="https://api.x.ai/v1")
+            response = client.chat.completions.create(
+                model="grok-3",
+                messages=[{"role": "user", "content": prompt}],
+            )
+            return response.choices[0].message.content
+        except Exception as e:
+            print(f"   ⚠️  Grok failed ({e}), falling back to Ollama...")
+
+    print(f"   🧠 {agent_name}: Generating with Ollama llama3 (local — slower)...")
+    response = ollama.generate(model="llama3", prompt=prompt)
+    return response["response"]
 
 
 def run_ideator_agent(state: dict):
@@ -44,9 +67,9 @@ def run_ideator_agent(state: dict):
 
     past_posts_text = "\n---\n".join(past_posts) if past_posts else "No past posts available."
 
-    # Build voice DNA section (truncate to fit context)
-    voice_section = voice_dna[:3000] if voice_dna else brand_dna[:2000]
-    icp_section = icp_profile[:1500] if icp_profile else ""
+    # Build voice DNA section (trimmed — ideator needs direction, not full DNA)
+    voice_section = voice_dna[:1500] if voice_dna else brand_dna[:1000]
+    icp_section = icp_profile[:800] if icp_profile else ""
 
     prompt = f"""You are a personal branding strategist for {ceo_name}, CEO of {company}.
 Industry: {industry}
@@ -86,9 +109,8 @@ For each idea, provide:
 
 Return exactly 3 ideas numbered 1, 2, 3."""
 
-    print("   🧠 Generating ideas with Ollama (llama3)...")
-    response = ollama.generate(model="llama3", prompt=prompt)
-    ideas_text = response["response"]
+    print("   🧠 Generating ideas...")
+    ideas_text = _generate_with_best_llm(prompt, agent_name="Ideator")
 
     # Parse into a list of ideas
     ideas = []

@@ -10,6 +10,7 @@ Output: Trend report with narrative hook, recommended archetype, and Copywriter 
 
 import os
 import ollama
+from concurrent.futures import ThreadPoolExecutor
 from serpapi import GoogleSearch
 from openai import OpenAI
 from dotenv import load_dotenv
@@ -42,6 +43,25 @@ STORY_ASSETS = [
     "4 competitor acquisitions: DSM-Tool, ViralVault, Salefreaks, Yaballe",
     "$150M+ GMV, $20M+ ARR, 250+ employees",
 ]
+
+
+def _generate_with_best_llm(prompt: str, agent_name: str = "Scout") -> str:
+    """Use Grok (fast, remote) if available, otherwise fall back to Ollama (local)."""
+    if XAI_API_KEY:
+        print(f"   🧠 {agent_name}: Generating with Grok-3 (remote — fast)...")
+        try:
+            client = OpenAI(api_key=XAI_API_KEY, base_url="https://api.x.ai/v1")
+            response = client.chat.completions.create(
+                model="grok-3",
+                messages=[{"role": "user", "content": prompt}],
+            )
+            return response.choices[0].message.content
+        except Exception as e:
+            print(f"   ⚠️  Grok failed ({e}), falling back to Ollama...")
+
+    print(f"   🧠 {agent_name}: Generating with Ollama llama3 (local — slower)...")
+    response = ollama.generate(model="llama3", prompt=prompt)
+    return response["response"]
 
 
 def _search_google_trends(query: str, num_results: int = 5) -> list[dict]:
@@ -129,15 +149,18 @@ def run_scout_agent(state: AgentState):
     google_query = f"{industry} trends {topics_str} 2025 2026"
     grok_topic = f"{industry} {topics_str} founders CEOs startups"
 
-    # 1. Google Search via SerpAPI — top 5 URLs
-    google_sources = _search_google_trends(google_query, num_results=5)
+    # 1 + 2: Run Google + Grok searches IN PARALLEL (saves ~10-15 seconds)
+    print("   📡 Searching Google + X in parallel...")
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        google_future = pool.submit(_search_google_trends, google_query, 5)
+        grok_future = pool.submit(_search_grok_trending, grok_topic)
+        google_sources = google_future.result()
+        grok_trends = grok_future.result()
+
     google_text = "\n".join(
         f"- {s['title']} ({s['url']}): {s['snippet']}" for s in google_sources
     )
     print(f"   ✅ Found {len(google_sources)} Google sources")
-
-    # 2. Grok (X/Twitter) — real-time trending topics with friction
-    grok_trends = _search_grok_trending(grok_topic)
     if grok_trends:
         print("   ✅ Got Grok trending topics")
     else:
@@ -150,8 +173,8 @@ def run_scout_agent(state: AgentState):
         combined_data += f"\n\nX (TWITTER) TRENDING TOPICS:\n{grok_trends}"
 
     # Build the strategist prompt with all context
-    voice_dna_section = f"\nVOICE DNA (how {ceo_name} speaks):\n{voice_dna[:2000]}" if voice_dna else ""
-    icp_section = f"\nTARGET AUDIENCE:\n{icp_profile[:1000]}" if icp_profile else ""
+    voice_dna_section = f"\nVOICE DNA (how {ceo_name} speaks):\n{voice_dna[:800]}" if voice_dna else ""
+    icp_section = f"\nTARGET AUDIENCE:\n{icp_profile[:500]}" if icp_profile else ""
     story_assets_text = "\n".join(f"- {s}" for s in STORY_ASSETS)
 
     summary_prompt = f"""You are the Strategist & Narrative Scout for {ceo_name}, CEO of {company}.
@@ -194,10 +217,10 @@ For EACH topic provide:
 
 Return exactly 3 topics in this format."""
 
-    response = ollama.generate(model="llama3", prompt=summary_prompt)
+    result = _generate_with_best_llm(summary_prompt, agent_name="Scout")
 
     return {
-        "trend_report": response["response"],
+        "trend_report": result,
         "google_sources": google_sources,
         "grok_trends": grok_trends,
     }
