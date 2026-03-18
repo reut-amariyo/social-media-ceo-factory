@@ -10,6 +10,7 @@ import os
 import sys
 import io
 import threading
+import queue
 import tkinter as tk
 from tkinter import ttk, scrolledtext, messagebox
 from datetime import datetime
@@ -82,6 +83,11 @@ class BrandingFactoryApp:
         self.is_running = False
         self.final_state = None
 
+        # Thread-safe queue for cross-thread UI updates (macOS Tkinter
+        # does not reliably process root.after() calls from non-main threads)
+        self._ui_queue = queue.Queue()
+        self._poll_ui_queue()
+
         # Build UI
         self._build_header()
         self._build_main_area()
@@ -129,6 +135,33 @@ class BrandingFactoryApp:
     def _clear_main(self):
         for widget in self.main_frame.winfo_children():
             widget.destroy()
+
+    # ============================================================
+    # Thread-safe UI updates (macOS Tk fix)
+    # ============================================================
+    def _schedule_on_main(self, callback):
+        """Queue a callable to run on the Tk main thread.
+        
+        On macOS, root.after() from a background thread is unreliable.
+        Instead we put callbacks in a queue and a main-thread poller
+        drains it every 50 ms.
+        """
+        self._ui_queue.put(callback)
+
+    def _poll_ui_queue(self):
+        """Main-thread poller: drain the queue and execute callbacks."""
+        try:
+            while True:
+                callback = self._ui_queue.get_nowait()
+                try:
+                    callback()
+                except Exception as e:
+                    sys.stderr.write(f"[UI-QUEUE-ERR] {e}\n")
+                    sys.stderr.flush()
+        except queue.Empty:
+            pass
+        # Re-schedule ourselves — always keep polling
+        self.root.after(50, self._poll_ui_queue)
 
     # ============================================================
     # Screen 1: Start
@@ -248,20 +281,29 @@ class BrandingFactoryApp:
         self.log_text.pack(fill="both", expand=True)
 
     def _log(self, message: str):
-        """Append a message to the log area (thread-safe)."""
+        """Append a message to the log area (thread-safe via queue)."""
         def _update():
-            self.log_text.config(state="normal")
-            self.log_text.insert("end", message + "\n")
-            self.log_text.see("end")
-            self.log_text.config(state="disabled")
-        self.root.after(0, _update)
+            try:
+                if hasattr(self, 'log_text') and self.log_text.winfo_exists():
+                    self.log_text.config(state="normal")
+                    self.log_text.insert("end", message + "\n")
+                    self.log_text.see("end")
+                    self.log_text.config(state="disabled")
+            except Exception:
+                pass
+        self._schedule_on_main(_update)
 
     def _set_progress(self, value: int, label: str):
-        """Update progress bar (thread-safe)."""
+        """Update progress bar (thread-safe via queue)."""
         def _update():
-            self.progress["value"] = value
-            self.progress_label.config(text=label)
-        self.root.after(0, _update)
+            try:
+                if hasattr(self, 'progress') and self.progress.winfo_exists():
+                    self.progress["value"] = value
+                if hasattr(self, 'progress_label') and self.progress_label.winfo_exists():
+                    self.progress_label.config(text=label)
+            except Exception:
+                pass
+        self._schedule_on_main(_update)
 
     def _animate_title(self):
         """Pulse the title dots so Reut sees the app is alive."""
@@ -813,7 +855,7 @@ class BrandingFactoryApp:
             self._set_progress(100, "Ready for review")
             self._restore_stdout()
             self.is_running = False
-            self.root.after(300, lambda: self._show_review_screen(self.state))
+            self._schedule_on_main(lambda: self._show_review_screen(self.state))
 
         except Exception as e:
             self._restore_stdout()
@@ -821,7 +863,7 @@ class BrandingFactoryApp:
             import traceback
             self._log(traceback.format_exc())
             self.is_running = False
-            self.root.after(0, lambda: messagebox.showerror("Error", str(e)))
+            self._schedule_on_main(lambda: messagebox.showerror("Error", str(e)))
 
     def _run_save_and_learn(self):
         """After approval: save to Obsidian, run analyst, show final screen."""
@@ -870,7 +912,7 @@ class BrandingFactoryApp:
             self._restore_stdout()
             self.is_running = False
             self.final_state = self.state
-            self.root.after(500, lambda: self._show_done_screen(self.state))
+            self._schedule_on_main(lambda: self._show_done_screen(self.state))
 
         except Exception as e:
             self._restore_stdout()
@@ -878,7 +920,7 @@ class BrandingFactoryApp:
             import traceback
             self._log(traceback.format_exc())
             self.is_running = False
-            self.root.after(0, lambda: messagebox.showerror("Error", str(e)))
+            self._schedule_on_main(lambda: messagebox.showerror("Error", str(e)))
 
     # ============================================================
     # Screen 5: Final Done (after Reut approved & saved)
@@ -1078,7 +1120,7 @@ class BrandingFactoryApp:
             # --- Step 4: Show ideas for selection ---
             self._set_progress(50, "💡 Pick your favorite idea...")
             self._restore_stdout()
-            self.root.after(0, lambda: self._show_idea_selection(self.ideas))
+            self._schedule_on_main(lambda: self._show_idea_selection(self.ideas))
 
         except Exception as e:
             self._restore_stdout()
@@ -1086,7 +1128,7 @@ class BrandingFactoryApp:
             import traceback
             self._log(traceback.format_exc())
             self.is_running = False
-            self.root.after(0, lambda: messagebox.showerror("Error", str(e)))
+            self._schedule_on_main(lambda: messagebox.showerror("Error", str(e)))
 
     def _restore_stdout(self):
         """Restore original stdout after agent run."""
@@ -1156,7 +1198,7 @@ class BrandingFactoryApp:
             self._log("\n🛑 READY FOR REVIEW — Reut, check the drafts!")
             self._restore_stdout()
             self.is_running = False
-            self.root.after(500, lambda: self._show_review_screen(self.state))
+            self._schedule_on_main(lambda: self._show_review_screen(self.state))
 
         except Exception as e:
             self._restore_stdout()
@@ -1164,7 +1206,7 @@ class BrandingFactoryApp:
             import traceback
             self._log(traceback.format_exc())
             self.is_running = False
-            self.root.after(0, lambda: messagebox.showerror("Error", str(e)))
+            self._schedule_on_main(lambda: messagebox.showerror("Error", str(e)))
 
     def _open_obsidian(self):
         """Open the Obsidian vault (or the output folder in Finder)."""
