@@ -13,6 +13,11 @@ ollama>=0.4.0
 google-search-results>=2.4.2   # SerpAPI wrapper
 openai>=1.0.0                   # Grok (X API) via OpenAI-compatible client
 
+# Web scraping for tech sites
+requests>=2.31.0
+beautifulsoup4>=4.12.0
+feedparser>=6.0.10             # RSS feed parsing
+
 # Obsidian vault integration
 PyYAML>=6.0
 
