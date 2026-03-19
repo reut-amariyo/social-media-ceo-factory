@@ -207,6 +207,9 @@ def run_scout_agent(state: dict):
     
     # === PHASE 1: Multi-Source Scan (Parallel) ===
     print("\n   🌐 PHASE 1: Scanning tech sources...")
+    print("      📰 Tech Sites: The Verge AI, TechCrunch AI, Wired, MIT Tech Review")
+    print("      🔥 Hacker News: Top stories with >50 comments")
+    print("      📄 Hugging Face: Daily upvoted papers")
     all_sources = []
     
     with ThreadPoolExecutor(max_workers=6) as executor:
@@ -235,6 +238,8 @@ def run_scout_agent(state: dict):
     
     # === PHASE 2: X Account Monitoring ===
     print("\n   🐦 PHASE 2: Monitoring key X accounts via Grok...")
+    print(f"      👥 Accounts: @{', @'.join(KEY_X_ACCOUNTS[:6])}...")
+    print(f"      👥 And 6 more: @{', @'.join(KEY_X_ACCOUNTS[6:12])}")
     x_monitoring = _monitor_x_accounts_via_grok(KEY_X_ACCOUNTS[:12], topic_context)
     if x_monitoring:
         print("      ✅ X monitoring complete")
@@ -314,7 +319,16 @@ Make hooks PUNCHY. Make language SIMPLE. Show Lior's BATTLE SCARS."""
 
     final_brief = _generate_with_grok(final_brief_prompt, agent_name="Scout (Final Brief)")
     
-    print("\n   ✅ SCOUT COMPLETE — 3 trend briefs generated\n")
+    # Summary of sources used
+    print("\n   ✅ SCOUT COMPLETE — 3 trend briefs generated")
+    print(f"   📊 Sources used: {len(all_sources)} items from:")
+    source_counts = {}
+    for item in all_sources:
+        src = item.get('source', 'Unknown')
+        source_counts[src] = source_counts.get(src, 0) + 1
+    for src, count in sorted(source_counts.items(), key=lambda x: x[1], reverse=True):
+        print(f"      • {src}: {count} items")
+    print()
     
     return {
         "trend_report": final_brief,
