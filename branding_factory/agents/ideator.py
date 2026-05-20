@@ -91,23 +91,43 @@ EXAMPLES OF PAST SUCCESSFUL POSTS (mimic this style):
 TODAY'S STRATEGIC BRIEF FROM SCOUT:
 {trend_report}
 
-Based on all of the above, propose exactly 3 content ideas that:
-1. Are aligned with {ceo_name}'s Voice DNA and tone (eye-level, never condescending)
-2. Connect a trending topic to their personal experience or expertise
-3. Have FRICTION — something debatable, not just "everyone agrees this is great"
-4. Would drive engagement (comments, shares) on LinkedIn (primary) + X + Instagram
-5. Pass the "Lior Test": Could ONLY {ceo_name} say this? (not generic advice)
+CRITICAL INSTRUCTION: Every idea MUST be directly based on the Scout findings above.
+- Use the AI company news (Section 1)
+- Use the trending X posts (Section 2)
+- Connect Lior's AutoDS/eBay experience to what's happening NOW
 
-For each idea, provide:
-- IDEA [N]: [catchy title]
-- ARCHETYPE: [which content type — External Brand Story / Personal Confession / Scene-Based Lesson / Framework / Empathy-First / Stories + Takeaways]
-- HOOK TYPE: [Provocative question / Personal confession / Scene-setting / Shocking stat / Empathy hook / Reader-mirror / Staccato fragments]
-- THE HOOK: The actual opening line that would stop the scroll (ONE line only)
-- ANGLE: How to connect the trend to {ceo_name}'s specific experience
-- TARGET: Investors / Entrepreneurs / Growth-Seekers
-- PLATFORMS: Which platforms this works best on
+Propose 5-7 content ideas. Keep it ULTRA SIMPLE - just 2 fields per idea.
 
-Return exactly 3 ideas numbered 1, 2, 3."""
+Format for each idea:
+
+IDEA [N]:
+The idea: [One punchy sentence connecting Scout finding to Lior's experience]
+
+Hook: [The scroll-stopping opening line - make it provocative]
+
+---
+
+RULES:
+1. Every idea MUST reference a specific Scout finding
+2. Keep it SHORT and PUNCHY
+3. Make it CONTROVERSIAL or surprising
+4. Only Lior can say this (AutoDS $150M GMV, eBay scaling, AI automation)
+5. Generate 5-7 ideas (at least 5, up to 7)
+
+Example of GOOD format:
+IDEA 1:
+The idea: Anthropic just released 200K context - I've been using it to automate customer support at AutoDS scale.
+
+Hook: "I just replaced 3 support agents with Claude's 200K context window. Our response time went from 4 hours to 4 seconds."
+
+---
+
+IDEA 2:
+The idea: Everyone's freaking out about AI pricing - but at AutoDS we're charging MORE for AI features and customers love it.
+
+Hook: "Hot take: If your AI features aren't expensive, they're not valuable. We 3x'd our price when we added AI and churn went DOWN."
+
+Return 5-7 ideas. Each must connect to a Scout finding."""
 
     print("   🧠 Generating ideas...")
     ideas_text = _generate_with_best_llm(prompt, agent_name="Ideator")
@@ -115,30 +135,37 @@ Return exactly 3 ideas numbered 1, 2, 3."""
     # --- Self-reflection: rank ideas against past performance ---
     print("   🔍 Ideator: Self-reflecting on idea quality...")
     if learning_log or past_posts:
-        ranking_prompt = f"""You are a branding strategist. You just generated these 3 content ideas:
+        ranking_prompt = f"""You just generated these 5-7 content ideas:
 
 {ideas_text}
-
-Now evaluate them against what you know about past performance:
 
 PAST PERFORMANCE DATA:
 {learning_log[:1500]}
 
-EXAMPLES OF SUCCESSFUL PAST POSTS:
-{past_posts_text[:1500]}
+Rank all ideas from strongest to weakest based on:
+1. Friction potential (will it generate comments/debate?)
+2. Uniqueness (could only Lior say this?)
+3. Clarity (is it immediately clear what the post is about?)
 
-For each idea:
-1. How similar is it to content that already performed well? (Similarity is OK if the angle is fresh)
-2. Does it have enough FRICTION to generate comments?
-3. Would the target audience (entrepreneurs, founders, investors) care about this?
+Return them ranked as:
+RANKED IDEA 1: 
+[paste the full idea text exactly as written]
 
-RANK the 3 ideas from strongest to weakest. Put the strongest first.
-Return them as:
-RANKED IDEA 1: [paste the full idea text]
-RANKED IDEA 2: [paste the full idea text]  
-RANKED IDEA 3: [paste the full idea text]
+RANKED IDEA 2: 
+[paste the full idea text exactly as written]
 
-Add a one-line RATIONALE after each explaining why it's ranked there."""
+RANKED IDEA 3: 
+[paste the full idea text exactly as written]
+
+RANKED IDEA 4: 
+[paste the full idea text exactly as written]
+
+RANKED IDEA 5: 
+[paste the full idea text exactly as written]
+
+(Continue for ideas 6-7 if generated)
+
+Add one sentence explaining why each is ranked there."""
 
         ranked_text = _generate_with_best_llm(ranking_prompt, agent_name="Ideator (ranking)")
         # Try to parse ranked ideas
@@ -164,14 +191,14 @@ Add a one-line RATIONALE after each explaining why it's ranked there."""
 
 
 def _parse_ideas(ideas_text: str) -> list[str]:
-    """Parse numbered ideas from LLM output."""
+    """Parse numbered ideas from LLM output (supports 1-7 ideas)."""
     ideas = []
-    for i in range(1, 4):
+    for i in range(1, 8):  # Parse up to 7 ideas
         start = ideas_text.find(f"{i}.")
         if start == -1:
             start = ideas_text.find(f"IDEA {i}")
-        end = ideas_text.find(f"{i + 1}.") if i < 3 else len(ideas_text)
-        if end == -1 and i < 3:
+        end = ideas_text.find(f"{i + 1}.") if i < 7 else len(ideas_text)
+        if end == -1 and i < 7:
             end = ideas_text.find(f"IDEA {i + 1}")
         if start != -1:
             ideas.append(ideas_text[start:end if end != -1 else len(ideas_text)].strip())
@@ -179,18 +206,28 @@ def _parse_ideas(ideas_text: str) -> list[str]:
 
 
 def _parse_ranked_ideas(ranked_text: str) -> list[str]:
-    """Parse ranked ideas from the self-reflection output."""
+    """Parse ranked ideas from the self-reflection output (supports 1-7 ideas)."""
+    import re
+    # Find all RANKED IDEA N: positions
+    markers = list(re.finditer(r'RANKED IDEA \d+:', ranked_text))
+    if not markers:
+        return []
+    
     ideas = []
-    for i in range(1, 4):
-        marker = f"RANKED IDEA {i}:"
-        start = ranked_text.find(marker)
-        if start == -1:
-            continue
-        start += len(marker)
-        # Find the next ranked idea or end
-        next_marker = f"RANKED IDEA {i + 1}:"
-        end = ranked_text.find(next_marker) if i < 3 else len(ranked_text)
-        if end == -1:
-            end = len(ranked_text)
-        ideas.append(ranked_text[start:end].strip())
+    for idx, match in enumerate(markers):
+        start = match.end()
+        end = markers[idx + 1].start() if idx + 1 < len(markers) else len(ranked_text)
+        idea_text = ranked_text[start:end].strip()
+        # Extract just the idea + hook, stop before any "This ranks" explanation
+        # Keep the core content but trim ranking explanation for cleaner display
+        lines = idea_text.split('\n')
+        clean_lines = []
+        for line in lines:
+            # Stop if we hit a ranking explanation for a DIFFERENT idea
+            if re.match(r'RANKED IDEA \d+:', line):
+                break
+            clean_lines.append(line)
+        idea_text = '\n'.join(clean_lines).strip()
+        if idea_text:
+            ideas.append(idea_text)
     return ideas

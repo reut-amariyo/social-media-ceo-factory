@@ -317,6 +317,111 @@ class BrandingFactoryApp:
     # ============================================================
     # Screen 3: Pick an idea (or write your own)
     # ============================================================
+    def _create_scout_insights_section(self, parent):
+        """Show scout trend report in a collapsible section."""
+        scout_report = self.state.get("trend_report", "")
+        if not scout_report:
+            return
+
+        # Container frame
+        container = tk.Frame(parent, bg=COLORS["bg"])
+        container.pack(fill="x", padx=10, pady=(5, 10))
+
+        # Header (clickable to expand/collapse)
+        header_frame = tk.Frame(
+            container,
+            bg=COLORS["card"],
+            highlightbackground=COLORS["border"],
+            highlightthickness=1,
+        )
+        header_frame.pack(fill="x")
+
+        self._scout_expanded = tk.BooleanVar(value=False)
+        self._scout_content_frame = None
+
+        def toggle_scout():
+            if self._scout_expanded.get():
+                # Collapse
+                if self._scout_content_frame:
+                    self._scout_content_frame.pack_forget()
+                self._scout_expanded.set(False)
+                toggle_btn.config(text="▶")
+            else:
+                # Expand
+                if self._scout_content_frame:
+                    self._scout_content_frame.pack(fill="both", expand=True)
+                self._scout_expanded.set(True)
+                toggle_btn.config(text="▼")
+
+        # Toggle button
+        toggle_btn = tk.Label(
+            header_frame,
+            text="▶",
+            font=("Helvetica Neue", 14, "bold"),
+            fg=COLORS["accent"],
+            bg=COLORS["card"],
+            cursor="hand2",
+            padx=10,
+        )
+        toggle_btn.pack(side="left")
+        toggle_btn.bind("<Button-1>", lambda e: toggle_scout())
+
+        # Title
+        header_label = tk.Label(
+            header_frame,
+            text="🔍  Scout Trend Report — See What's Trending Right Now",
+            font=("Helvetica Neue", 13, "bold"),
+            fg=COLORS["text"],
+            bg=COLORS["card"],
+            cursor="hand2",
+            anchor="w",
+        )
+        header_label.pack(side="left", fill="x", expand=True, pady=10)
+        header_label.bind("<Button-1>", lambda e: toggle_scout())
+
+        # Content frame (hidden by default)
+        content_frame = tk.Frame(
+            container,
+            bg=COLORS["surface"],
+            highlightbackground=COLORS["border"],
+            highlightthickness=1,
+        )
+        self._scout_content_frame = content_frame
+
+        # Scrollable text area for scout report
+        text_widget = scrolledtext.ScrolledText(
+            content_frame,
+            font=("Helvetica Neue", 11),
+            bg=COLORS["card"],
+            fg=COLORS["text"],
+            wrap="word",
+            padx=15,
+            pady=15,
+            height=15,
+            relief="flat",
+        )
+        text_widget.pack(fill="both", expand=True, padx=5, pady=5)
+        text_widget.insert("1.0", scout_report)
+        text_widget.config(state="disabled")  # Read-only
+
+        # Add a note about how ideas connect to scout
+        note_frame = tk.Frame(content_frame, bg=COLORS["surface"])
+        note_frame.pack(fill="x", padx=10, pady=(0, 10))
+        
+        note = tk.Label(
+            note_frame,
+            text="💡 Connection: The ideas below were generated from these trends. See how the Ideator connected them to Lior's experience.",
+            font=("Helvetica Neue", 10, "italic"),
+            fg=COLORS["warning"],
+            bg=COLORS["surface"],
+            wraplength=800,
+            justify="left",
+        )
+        note.pack(anchor="w")
+        
+        # Optionally auto-expand on first view
+        # toggle_scout()  # Uncomment to show expanded by default
+
     def _show_idea_selection(self, ideas: list):
         self._clear_main()
 
@@ -336,7 +441,10 @@ class BrandingFactoryApp:
             fg=COLORS["text_dim"],
             bg=COLORS["bg"],
         )
-        subtitle.pack(pady=(0, 10))
+        subtitle.pack(pady=(0, 5))
+
+        # === NEW: Scout Insights Section ===
+        self._create_scout_insights_section(self.main_frame)
 
         # Scrollable area
         canvas = tk.Canvas(self.main_frame, bg=COLORS["bg"], highlightthickness=0)
@@ -475,15 +583,31 @@ class BrandingFactoryApp:
         )
         card.pack(fill="x", pady=6, padx=5)
 
+        # Header with scout connection indicator
+        header_frame = tk.Frame(card, bg=COLORS["card"])
+        header_frame.pack(fill="x")
+        
         header = tk.Label(
-            card,
+            header_frame,
             text=f"💡 Idea {index + 1}",
             font=("Helvetica Neue", 14, "bold"),
             fg=COLORS["accent"],
             bg=COLORS["card"],
             anchor="w",
         )
-        header.pack(fill="x")
+        header.pack(side="left")
+        
+        # Badge showing this came from scout trends
+        badge = tk.Label(
+            header_frame,
+            text="🔍 From Scout",
+            font=("Helvetica Neue", 9),
+            fg=COLORS["text_dim"],
+            bg=COLORS["surface"],
+            padx=6,
+            pady=2,
+        )
+        badge.pack(side="left", padx=(10, 0))
 
         # Truncate for display but keep full text for selection
         display_text = idea_text[:400] + "..." if len(idea_text) > 400 else idea_text
