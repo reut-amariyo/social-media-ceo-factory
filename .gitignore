@@ -28,6 +28,16 @@ env/
 # Generated outputs
 outputs/
 
+# Personal data — NEVER commit these
+profile.yaml
+obsidian_vault_template/filled/
+claude_code/reut-workspace/
+
+# Model files (large)
+*.ckpt
+*.safetensors
+*.bin
+
 # Model cache (SDXL can be huge)
 *.safetensors
 *.ckpt

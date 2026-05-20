@@ -100,7 +100,7 @@ def _phase1_hard_checks(drafts: dict) -> list[str]:
 
     for word in BANNED_WORDS:
         if word in combined_lower:
-            errors.append(f"Banned word '{word}' detected. Lior NEVER uses this word. Remove or replace.")
+            errors.append(f"Banned word '{word}' detected. NEVER uses this word. Remove or replace.")
 
     # --- Punctuation ---
     for char, desc in PUNCTUATION_VIOLATIONS:
@@ -278,7 +278,7 @@ def run_validator_agent(state: dict):
     voice_dna = state.get("voice_dna", "")
     icp_profile = state.get("icp_profile", "")
     ceo = state.get("ceo_profile", {})
-    ceo_name = ceo.get("name", "Lior Pozin")
+    ceo_name = ceo.get("name", "Unknown")
     iteration = state.get("iteration_count", 0)
 
     if not drafts:

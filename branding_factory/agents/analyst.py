@@ -43,7 +43,7 @@ def run_analyst_agent(state: dict):
     print("--- 📊 AGENT: ANALYST (Learning from This Run) ---")
 
     ceo = state.get("ceo_profile", {})
-    ceo_name = ceo.get("name", "Lior Pozin")
+    ceo_name = ceo.get("name", "Unknown")
     engagement_data = state.get("engagement_data", "")
     selected_idea = state.get("selected_idea", "")
     drafts = state.get("post_drafts", {})

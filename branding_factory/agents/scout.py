@@ -99,24 +99,17 @@ AI_COMPANY_SOURCES = {
     "cohere_blog": "https://cohere.com/blog",  # Will scrape
 }
 
-# Lior's expertise areas (for mapping trends)
-LIOR_EXPERTISE = {
-    "saas_pricing": "Scaled AutoDS using outcome-based pricing, not cost-plus",
-    "ai_automation": "Built AI-powered product research that processed millions of listings",
-    "growth_hacking": "Grew from $0 to 8 figures using viral loops and upselling",
-    "competitor_acquisition": "Acquired 4 competitors (DSM-Tool, ViralVault, Salefreaks, Yaballe)",
-    "bootstrapping": "Bootstrapped to $20M ARR before acquisition",
-    "ecommerce_ops": "Ran dropshipping operations at $150M+ GMV",
-}
 
-# Lior's story moments (for connecting to trends)
-LIOR_STORIES = [
-    "Age 14: Found TinyDeal-eBay arbitrage, made first $40 profit",
-    "Age 21: eBay blocked account, built automation → became AutoDS",
-    "VAT Crisis: Took a loan, created $30K/month mentorship program",
-    "Rejected PE Deal: Walked away 1 day before closing (cultural misalignment)",
-    "Fiverr Acquisition: First dropshipping software acquired by public company",
-]
+def _get_ceo_expertise(state: dict) -> dict:
+    """Get CEO expertise from profile (dynamic, not hardcoded)."""
+    ceo = state.get("ceo_profile", {})
+    return ceo.get("expertise", {})
+
+
+def _get_ceo_stories(state: dict) -> list:
+    """Get CEO story moments from profile (dynamic, not hardcoded)."""
+    ceo = state.get("ceo_profile", {})
+    return ceo.get("stories", [])
 
 
 def _generate_with_grok(prompt: str, agent_name: str = "Scout") -> str:
@@ -330,7 +323,7 @@ def run_scout_agent(state: dict):
     print("--- 🔍 AGENT: SCOUT (Tech Pulse Radar) ---")
     
     ceo = state.get("ceo_profile", {})
-    ceo_name = ceo.get("name", "Lior Pozin")
+    ceo_name = ceo.get("name", "Unknown")
     company = ceo.get("company", "AutoDS")
     topics = ceo.get("topics", ["SaaS", "AI", "Scaling"])
     topic_context = ", ".join(topics) if isinstance(topics, list) else str(topics)
@@ -422,9 +415,9 @@ def run_scout_agent(state: dict):
         for item in ai_saas_news[:15]
     )
     
-    final_brief_prompt = f"""You are a trend analyst for Lior Pozin, CEO of AutoDS (acquired by Fiverr).
+    final_brief_prompt = f"""You are a trend analyst for {ceo_name}, {ceo.get('role', 'CEO')} of {company}.
 
-FOCUS: AI in SaaS (AI features in SaaS products, AI-powered SaaS tools, AI transforming SaaS companies)
+FOCUS: {topic_context}
 
 AI COMPANY NEWS & RESEARCH (WITH TIMESTAMPS):
 {ai_news_summary[:2500]}
@@ -432,11 +425,9 @@ AI COMPANY NEWS & RESEARCH (WITH TIMESTAMPS):
 TOP X POSTS ABOUT AI IN SAAS (HIGHEST ENGAGEMENT):
 {top_x_posts[:2500]}
 
-Lior's Background:
-- Built AutoDS (dropshipping SaaS with AI automation) from $0 → $20M ARR → Acquired by Fiverr
-- Used AI for product research automation, pricing optimization
-- Bootstrapped, then acquired 4 competitors
-- E-commerce operations at $150M+ GMV
+{ceo_name}'s Background:
+{chr(10).join(f'- {s}' for s in _get_ceo_stories(state)) if _get_ceo_stories(state) else f'- {ceo.get("role", "CEO")} at {company} in {ceo.get("industry", "tech")}'}
+Expertise: {', '.join(f'{k}: {v}' for k, v in _get_ceo_expertise(state).items()) if _get_ceo_expertise(state) else topic_context}
 
 TASK: Create a structured trend report with TWO sections:
 

@@ -1,4 +1,4 @@
-# Lior Pozin's Personal Branding Factory
+# Personal Branding Factory
 # =========================================
 # Install with: pip install -r requirements.txt
 
@@ -18,13 +18,13 @@ requests>=2.31.0
 beautifulsoup4>=4.12.0
 feedparser>=6.0.10             # RSS feed parsing
 
-# Obsidian vault integration
+# Profile & vault integration
 PyYAML>=6.0
 
 # Environment variables
 python-dotenv>=1.0.0
 
-# Image generation (optional — for Stable Diffusion XL on Apple M4)
+# Image generation (optional — works on macOS MPS, NVIDIA CUDA, or CPU)
 # Uncomment these if you want local image generation:
 # torch>=2.0.0
 # diffusers>=0.30.0
