@@ -71,9 +71,27 @@ def run_creator_agent(state: dict):
     # If retrying after validation failure, include feedback
     retry_instructions = ""
     if validation_feedback and "FAIL" in validation_feedback:
+        # Extract specific banned words mentioned in feedback
+        banned_words_found = []
+        for word in ["leverage", "optimize", "synergize", "utilize", "implement",
+                     "innovative", "cutting-edge", "best-in-class", "game-changer",
+                     "very", "quite", "somewhat", "journey", "passionate about",
+                     "excited to announce", "hustle", "grind"]:
+            if word.lower() in (validation_feedback.lower() + " " + 
+                               str(state.get("post_drafts", {}))).lower():
+                banned_words_found.append(word)
+        
+        banned_warning = ""
+        if banned_words_found:
+            banned_warning = f"""
+🚨 ABSOLUTE BAN — These words appeared in your last draft and MUST NOT appear again:
+{', '.join(f'"{w}"' for w in banned_words_found)}
+Do a final scan of your output. If ANY of these words appear, replace them immediately.
+"""
         retry_instructions = f"""
-⚠️ IMPORTANT: The previous draft was REJECTED by the Gatekeeper. Fix these issues:
+⚠️ CRITICAL: The previous draft was REJECTED. You MUST fix these issues or the post cannot be published:
 {validation_feedback}
+{banned_warning}
 """
         print(f"   🔄 Retrying with feedback: {validation_feedback[:100]}...")
 
@@ -197,10 +215,38 @@ Rewrite ALL drafts fixing these issues. Return in the same format."""
     else:
         print("   ✅ Self-check passed — drafts look good")
 
+    # Final deterministic scan: remove any remaining banned words
+    drafts = _strip_banned_words(drafts)
+
     return {
         "post_drafts": drafts,
         "iteration_count": state.get("iteration_count", 0) + 1,
     }
+
+
+def _strip_banned_words(drafts: dict) -> dict:
+    """Deterministic post-processing: replace banned words with safe alternatives."""
+    import re
+    replacements = {
+        r'\bvery\b': 'really',
+        r'\bleverage\b': 'use',
+        r'\boptimize\b': 'improve',
+        r'\butilize\b': 'use',
+        r'\bsynergize\b': 'combine',
+        r'\bimplement\b': 'build',
+        r'\binnovative\b': 'new',
+        r'\bcutting-edge\b': 'sharp',
+        r'\bgame-changer\b': 'shift',
+        r'\bhustle\b': 'work',
+        r'\bgrind\b': 'push',
+        r'\bjourney\b': 'path',
+    }
+    cleaned = {}
+    for platform, text in drafts.items():
+        for pattern, replacement in replacements.items():
+            text = re.sub(pattern, replacement, text, flags=re.IGNORECASE)
+        cleaned[platform] = text
+    return cleaned
 
 
 def _self_evaluate(drafts: dict, ceo_name: str, voice_dna: str, idea: str) -> str | None:

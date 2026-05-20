@@ -18,7 +18,12 @@ def run_graphic_agent(state: dict):
     selected_idea = state.get("selected_idea", "")
     drafts = state.get("post_drafts", {})
     li_post = drafts.get("linkedin", "")
-    context = selected_idea[:150] if selected_idea else li_post[:150]
+    x_post = drafts.get("x", "")
+    
+    # Build context: prefer the actual post content (more concrete), fallback to idea
+    context = x_post[:150] if x_post else li_post[:150] if li_post else selected_idea[:150]
+    if not context:
+        context = "Tech CEO sharing business insights about AI and scaling"
 
     image_prompt = (
         f"Professional, modern 3D render style illustration for a tech CEO's social media post. "

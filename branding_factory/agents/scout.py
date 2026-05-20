@@ -4,16 +4,19 @@ Scout Agent — Tech Pulse Radar (Upgraded)
 Multi-source intelligence gathering for trend hijacking.
 
 Sources:
-1. Tech Sites: The Verge AI, TechCrunch AI, Wired, MIT Tech Review, Hacker News, Hugging Face
-2. X Account Monitoring: 12 key influencer accounts via Grok
-3. Conversation Heat Detection: Which topics have the most engagement
-4. Friction Extraction: What people are arguing about in comments
-5. Lior Mapping: How to connect trends to his AutoDS experience
+1. Tech News Sites: The Verge AI, TechCrunch AI, Wired, MIT Tech Review
+2. AI Company Blogs: OpenAI, Anthropic, Google AI, Microsoft, Meta, Apple ML, AWS, Hugging Face, Stability AI, Mistral, Cohere
+3. Hacker News: Top stories with high engagement
+4. X Account Monitoring: Tech influencers + Content inspiration accounts via Grok
+5. Inspiration List: 16 content creators to learn format/style from
+6. Friction Extraction: What people are arguing about in comments
+7. Lior Mapping: How to connect trends to his AutoDS experience
 
-Output: 3 Trend + Friction + Lior Angle combos with eye-level hooks
+Output: 3 Trend + Friction + Lior Angle + Format Inspiration combos with eye-level hooks
 """
 
 import os
+import sys
 import requests
 import feedparser
 from bs4 import BeautifulSoup
@@ -21,12 +24,16 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from openai import OpenAI
 from dotenv import load_dotenv
 
+# Add parent directory to path to import inspiration_list
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from inspiration_list import get_x_inspiration_handles, get_inspiration_summary
+
 load_dotenv()
 
 XAI_API_KEY = os.getenv("XAI_API_KEY")
 
-# Tech influencers to monitor via X
-KEY_X_ACCOUNTS = [
+# Tech influencers to monitor via X (AI/Tech specific)
+TECH_X_ACCOUNTS = [
     "alliekmiller",      # AI in business (1.2M followers)
     "bentossell",        # Ben's Bites, practical AI tools
     "Saj_Adib",          # AI Tool Radar
@@ -34,12 +41,17 @@ KEY_X_ACCOUNTS = [
     "mattshumer_",       # OthersideAI CEO
     "OfficialLoganK",    # Google/OpenAI, big tech moves
     "emollick",          # Wharton prof, experimental AI use
-    "levelsio",          # Indie hacker, bootstrapping
     "shl",               # Sahil Lavingia (Gumroad)
     "patio11",           # Patrick McKenzie, SaaS insights
     "swyx",              # AI Engineer Summit, dev tools
     "sama",              # Sam Altman, OpenAI CEO
 ]
+
+# Inspiration list (content creators to learn from)
+INSPIRATION_X_ACCOUNTS = get_x_inspiration_handles()
+
+# Combined list: Tech + Inspiration
+KEY_X_ACCOUNTS = TECH_X_ACCOUNTS + INSPIRATION_X_ACCOUNTS
 
 # Tech news sources (RSS/scraping)
 TECH_SOURCES = {
@@ -47,6 +59,44 @@ TECH_SOURCES = {
     "techcrunch_ai": "https://techcrunch.com/category/artificial-intelligence/feed/",
     "wired": "https://www.wired.com/feed/tag/ai/latest/rss",
     "mit_tech": "https://www.technologyreview.com/feed/",
+}
+
+# AI Company Official Blogs & News (Product launches, features, research)
+AI_COMPANY_SOURCES = {
+    # OpenAI
+    "openai_blog": "https://openai.com/blog/rss",
+    "openai_research": "https://openai.com/research/rss",
+    
+    # Anthropic
+    "anthropic_news": "https://www.anthropic.com/news",  # Will scrape
+    
+    # Google AI
+    "google_ai_blog": "https://ai.googleblog.com/feeds/posts/default",
+    "google_deepmind": "https://deepmind.google/discover/blog/rss.xml",
+    
+    # Microsoft AI
+    "microsoft_ai": "https://blogs.microsoft.com/ai/feed/",
+    
+    # Meta AI
+    "meta_ai": "https://ai.meta.com/blog/rss/",
+    
+    # Apple ML Research (no RSS, will scrape)
+    "apple_ml": "https://machinelearning.apple.com",
+    
+    # Amazon/AWS AI
+    "aws_ai": "https://aws.amazon.com/blogs/machine-learning/feed/",
+    
+    # Hugging Face
+    "huggingface_blog": "https://huggingface.co/blog/feed.xml",
+    
+    # Stability AI
+    "stability_ai": "https://stability.ai/news",  # Will scrape
+    
+    # Mistral AI
+    "mistral_blog": "https://mistral.ai/news/",  # Will scrape
+    
+    # Cohere
+    "cohere_blog": "https://cohere.com/blog",  # Will scrape
 }
 
 # Lior's expertise areas (for mapping trends)
@@ -160,6 +210,89 @@ def _fetch_huggingface_papers(max_items: int = 5) -> list[dict]:
         return []
 
 
+def _scrape_company_news(name: str, url: str, max_items: int = 3) -> list[dict]:
+    """Scrape AI company news pages (for those without RSS feeds)."""
+    try:
+        response = requests.get(url, timeout=5, headers={"User-Agent": "Mozilla/5.0"})
+        soup = BeautifulSoup(response.text, 'html.parser')
+        
+        items = []
+        # Try to find article titles and links (common patterns)
+        for tag in soup.find_all(['h2', 'h3', 'h4'], limit=max_items * 2):
+            link = tag.find_parent('a') or tag.find('a')
+            if link and link.get('href'):
+                title = tag.get_text(strip=True)
+                href = link.get('href')
+                
+                # Make absolute URL if relative
+                if href.startswith('/'):
+                    from urllib.parse import urljoin
+                    href = urljoin(url, href)
+                
+                if title and len(title) > 10:  # Filter out noise
+                    items.append({
+                        "source": name,
+                        "title": title,
+                        "link": href,
+                    })
+                    if len(items) >= max_items:
+                        break
+        
+        return items
+    except Exception as e:
+        print(f"   ⚠️ Scrape failed for {name}: {e}")
+        return []
+
+
+def _get_top_x_posts_about_ai_saas() -> str:
+    """Use Grok to get the top 5-7 X posts about AI in SaaS with highest engagement."""
+    if not XAI_API_KEY:
+        return ""
+    
+    prompt = """You are Grok with real-time X (Twitter) access.
+
+Find the TOP 5-7 POSTS from the LAST 24-48 HOURS about AI in SaaS.
+
+CRITICAL FILTERS:
+- Focus: AI in SaaS (AI features in SaaS products, AI tools for SaaS companies, AI-powered SaaS)
+- Sort by: Highest engagement (likes + retweets + replies combined)
+- Only posts with 1000+ total engagement
+- Skip: Generic AI hype, consumer AI apps, AI research papers
+
+For each post, return:
+1. @username
+2. When posted (e.g., "2 hours ago", "yesterday", "today")
+3. Exact post text (first 200 chars)
+4. Engagement count (likes + retweets + replies)
+5. Why it's trending (1 sentence)
+
+Format:
+---
+@username · 2 hours ago · (15.2K engagement)
+"Post text here..."
+Why trending: Product Hunt launch of AI copilot for SaaS got massive traction
+
+---
+@username2 · yesterday · (12.8K engagement)
+"Post text..."
+Why trending: CEO shared revenue numbers from AI features
+
+Keep it CONCISE. Return exactly 5-7 posts. ALWAYS include the timestamp (when posted)."""
+
+    try:
+        print(f"   🔍 Fetching top AI in SaaS posts from X...")
+        client = OpenAI(api_key=XAI_API_KEY, base_url="https://api.x.ai/v1")
+        response = client.chat.completions.create(
+            model="grok-3",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.7,
+        )
+        return response.choices[0].message.content
+    except Exception as e:
+        print(f"   ❌ Grok error: {e}")
+        return ""
+
+
 def _monitor_x_accounts_via_grok(accounts: list[str], topic_context: str) -> str:
     """Use Grok to check recent tweets from key accounts."""
     if not XAI_API_KEY:
@@ -207,17 +340,43 @@ def run_scout_agent(state: dict):
     
     # === PHASE 1: Multi-Source Scan (Parallel) ===
     print("\n   🌐 PHASE 1: Scanning tech sources...")
-    print("      📰 Tech Sites: The Verge AI, TechCrunch AI, Wired, MIT Tech Review")
+    print("      📰 Tech News: The Verge AI, TechCrunch AI, Wired, MIT Tech Review")
+    print("      🏢 AI Companies: OpenAI, Anthropic, Google, Microsoft, Meta, Apple, AWS")
     print("      🔥 Hacker News: Top stories with >50 comments")
     print("      📄 Hugging Face: Daily upvoted papers")
     all_sources = []
     
-    with ThreadPoolExecutor(max_workers=6) as executor:
+    with ThreadPoolExecutor(max_workers=12) as executor:
         futures = {}
         
-        # Tech site RSS feeds
+        # Tech news RSS feeds
         for name, url in TECH_SOURCES.items():
             futures[executor.submit(_fetch_rss_feed, name, url, 5)] = name
+        
+        # AI Company sources (RSS + scraping)
+        rss_sources = [
+            ("openai_blog", AI_COMPANY_SOURCES["openai_blog"]),
+            ("openai_research", AI_COMPANY_SOURCES["openai_research"]),
+            ("google_ai_blog", AI_COMPANY_SOURCES["google_ai_blog"]),
+            ("google_deepmind", AI_COMPANY_SOURCES["google_deepmind"]),
+            ("microsoft_ai", AI_COMPANY_SOURCES["microsoft_ai"]),
+            ("meta_ai", AI_COMPANY_SOURCES["meta_ai"]),
+            ("aws_ai", AI_COMPANY_SOURCES["aws_ai"]),
+            ("huggingface_blog", AI_COMPANY_SOURCES["huggingface_blog"]),
+        ]
+        for name, url in rss_sources:
+            futures[executor.submit(_fetch_rss_feed, name, url, 3)] = name
+        
+        # Scrape-only AI companies
+        scrape_sources = [
+            ("anthropic", AI_COMPANY_SOURCES["anthropic_news"]),
+            ("apple_ml", AI_COMPANY_SOURCES["apple_ml"]),
+            ("stability_ai", AI_COMPANY_SOURCES["stability_ai"]),
+            ("mistral_blog", AI_COMPANY_SOURCES["mistral_blog"]),
+            ("cohere_blog", AI_COMPANY_SOURCES["cohere_blog"]),
+        ]
+        for name, url in scrape_sources:
+            futures[executor.submit(_scrape_company_news, name, url, 3)] = name
         
         # Hacker News
         futures[executor.submit(_fetch_hacker_news_top, 10)] = "hacker_news"
@@ -236,102 +395,116 @@ def run_scout_agent(state: dict):
     
     print(f"   📊 Total sources collected: {len(all_sources)}")
     
-    # === PHASE 2: X Account Monitoring ===
-    print("\n   🐦 PHASE 2: Monitoring key X accounts via Grok...")
-    print(f"      👥 Accounts: @{', @'.join(KEY_X_ACCOUNTS[:6])}...")
-    print(f"      👥 And 6 more: @{', @'.join(KEY_X_ACCOUNTS[6:12])}")
-    x_monitoring = _monitor_x_accounts_via_grok(KEY_X_ACCOUNTS[:12], topic_context)
-    if x_monitoring:
-        print("      ✅ X monitoring complete")
+    # === PHASE 2: Top X Posts About AI in SaaS ===
+    print("\n   🐦 PHASE 2: Finding top X posts about AI in SaaS...")
+    print("      🔥 Filtering by highest engagement (1000+ interactions)")
+    print("      🎯 Focus: AI features, AI-powered SaaS, AI in SaaS companies")
+    
+    top_x_posts = _get_top_x_posts_about_ai_saas()
+    if top_x_posts:
+        print("      ✅ Found top 5-7 posts")
     else:
         print("      ⏭️ Skipped (no XAI key)")
     
-    # === PHASE 3: Final Brief Generation ===
-    print("\n   📝 PHASE 3: Generating trend briefs...")
+    # === PHASE 3: Generate Two Separate Sections ===
+    print("\n   📝 PHASE 3: Generating structured trend report...")
     
-    # Build a summary of all sources for context
-    sources_summary = "\n".join(
-        f"[{item.get('source', 'Unknown')}] {item.get('title', '')} "
-        f"({item.get('comments', 0)} comments, {item.get('score', 0)} upvotes)"
-        for item in all_sources[:25]
+    # Filter for AI in SaaS news with timestamps
+    ai_saas_news = [item for item in all_sources if any(
+        keyword in item.get('title', '').lower() or keyword in item.get('source', '').lower()
+        for keyword in ['ai', 'openai', 'anthropic', 'microsoft', 'google', 'saas']
+    )]
+    
+    # Include timestamps and sources in the summary
+    ai_news_summary = "\n".join(
+        f"• [{item.get('source', '')}] {item.get('title', '')} "
+        f"(Published: {item.get('published', 'recently')})"
+        for item in ai_saas_news[:15]
     )
     
-    final_brief_prompt = f"""You are the Tech Pulse Radar for Lior Pozin, CEO of AutoDS (acquired by Fiverr).
+    final_brief_prompt = f"""You are a trend analyst for Lior Pozin, CEO of AutoDS (acquired by Fiverr).
 
-COLLECTED INTELLIGENCE:
+FOCUS: AI in SaaS (AI features in SaaS products, AI-powered SaaS tools, AI transforming SaaS companies)
 
-Tech News Sources:
-{sources_summary[:2500]}
+AI COMPANY NEWS & RESEARCH (WITH TIMESTAMPS):
+{ai_news_summary[:2500]}
 
-X Account Monitoring:
-{x_monitoring[:1500]}
+TOP X POSTS ABOUT AI IN SAAS (HIGHEST ENGAGEMENT):
+{top_x_posts[:2500]}
 
-Lior's Expertise:
-- SaaS pricing (outcome-based, not cost-plus)
-- AI automation (built product research AI at AutoDS)
-- Bootstrapping ($0 to $20M ARR, then acquired by Fiverr)
-- Competitor acquisition (4 companies: DSM-Tool, ViralVault, Salefreaks, Yaballe)
-- E-commerce operations ($150M+ GMV)
+Lior's Background:
+- Built AutoDS (dropshipping SaaS with AI automation) from $0 → $20M ARR → Acquired by Fiverr
+- Used AI for product research automation, pricing optimization
+- Bootstrapped, then acquired 4 competitors
+- E-commerce operations at $150M+ GMV
 
-Lior's Stories:
-{chr(10).join(f"- {s}" for s in LIOR_STORIES)}
+TASK: Create a structured trend report with TWO sections:
 
-TARGET AUDIENCE:
-- **Builders** (anyone building products, not just "founders")
-- Entrepreneurs (aspiring and active)
-- Growth-minded people who want to ship and win
+=== SECTION 1: AI COMPANY NEWS (3-6 items) ===
+
+Pick 3-6 news items from AI companies (Anthropic, OpenAI, Microsoft, Google, Meta, AWS, etc.)
+
+Format each as 1 sentence (25-35 words):
+- [Company] [timing] [what happened] + [why SaaS companies should care]
+
+Example:
+1. Anthropic yesterday released Claude with 200K context windows, letting SaaS companies build AI on entire customer histories instead of snippets.
+2. Microsoft this week announced $50/month Copilot pricing, proving customers will pay premium for AI features.
+3. OpenAI today launched Realtime API, enabling SaaS companies to add voice AI in hours, not months.
+
+=== SECTION 2: TOP X POSTS (3-6 items) ===
+
+Pick 3-6 posts from the X monitoring data provided above.
+
+Format each as:
+@username · [timing] · ([engagement] interactions)
+"[First 100-150 chars of post]"
+Intent: [Why this is trending - what's the emotional driver or business angle]
+
+Example:
+@rauchg · 3 hours ago · (18.5K interactions)
+"Vercel just shipped AI SDK 4.0 with streaming and function calling built in. This changes everything for SaaS companies building AI features..."
+Intent: Product launch excitement + FOMO (fear of being left behind in AI race)
 
 CRITICAL RULES:
-1. Use "builders" instead of "founders"
-2. Make language ACCESSIBLE (no jargon)
-3. Start with HUMAN EMOTION (fear, FOMO, confusion)
-4. Connect to Lior's REAL EXPERIENCE at AutoDS
-5. Focus on FRICTION (what people are arguing/struggling with)
+- Section 1: Company news ONLY (not X posts)
+- Section 2: X posts ONLY (not company news)
+- MUST include timing in both sections
+- MUST include "Intent" for X posts (emotional/business driver)
+- Keep it concise and actionable
 
-TASK: Create 3 TREND BRIEFS in this exact format:
+Return in this exact format:
 
----
-**TREND #1: [Title]**
+=== AI COMPANY NEWS ===
+1. [sentence]
+2. [sentence]
+3. [sentence]
+(continue for 3-6 items)
 
-**What's Happening (Raw Trend):**
-[2-3 sentences: what's the tech news/event happening RIGHT NOW]
+=== TOP X POSTS ===
+@username · timing · (engagement)
+"post text..."
+Intent: [intent]
 
-**The Friction (What People Are Arguing About):**
-[2-3 sentences: what's the pain, debate, confusion, or fear]
+@username · timing · (engagement)
+"post text..."
+Intent: [intent]
 
-**Lior's Lens (His Unique POV from AutoDS):**
-[2-3 sentences: how his journey from eBay arbitrage → $150M GMV gives him a unique answer]
-
-**Eye-Level Hook (Accessible to Everyone):**
-[1-2 punchy sentences. Use "builders" not "founders". Make it relatable.]
-
----
-**TREND #2: [Title]**
-[same format]
-
----
-**TREND #3: [Title]**
-[same format]
-
----
-
-Make hooks PUNCHY. Make language SIMPLE. Show Lior's BATTLE SCARS."""
+(continue for 3-6 items)"""
 
     final_brief = _generate_with_grok(final_brief_prompt, agent_name="Scout (Final Brief)")
     
     # Summary of sources used
-    print("\n   ✅ SCOUT COMPLETE — 3 trend briefs generated")
-    print(f"   📊 Sources used: {len(all_sources)} items from:")
-    source_counts = {}
-    for item in all_sources:
-        src = item.get('source', 'Unknown')
-        source_counts[src] = source_counts.get(src, 0) + 1
-    for src, count in sorted(source_counts.items(), key=lambda x: x[1], reverse=True):
-        print(f"      • {src}: {count} items")
+    print("\n   ✅ SCOUT COMPLETE — Structured report generated")
+    print("   📰 AI Company News: 3-6 items")
+    print("   🐦 Top X Posts: 3-6 items with intent analysis")
+    print(f"   📊 AI in SaaS sources used: {len(ai_saas_news)} items")
+    print(f"   🐦 Top X posts: {len(top_x_posts) if top_x_posts else 0} chars")
     print()
     
     return {
         "trend_report": final_brief,
-        "raw_sources": all_sources[:20],  # Keep top 20 for reference
-        "x_monitoring": x_monitoring,
+        "raw_sources": ai_saas_news[:15],  # Keep top 15 AI/SaaS sources
+        "top_x_posts": top_x_posts,
     }
+
