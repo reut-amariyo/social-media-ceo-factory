@@ -43,7 +43,7 @@ def run_ideator_agent(state: dict):
 
     ceo = state.get("ceo_profile", {})
     ceo_name = ceo.get("name", "Unknown")
-    company = ceo.get("company", "AutoDS")
+    company = ceo.get("company", "")
     industry = ceo.get("industry", "E-commerce, SaaS, AI")
     topics = ceo.get("topics", [])
     tone = ceo.get("tone", "Direct, bold, eye-level, no-BS")

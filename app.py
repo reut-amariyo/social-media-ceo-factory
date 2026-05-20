@@ -1207,6 +1207,9 @@ class BrandingFactoryApp:
                     "expertise": self.profile.get("expertise", {}),
                     "banned_words": self.profile.get("banned_words", []),
                     "preferred_words": self.profile.get("preferred_words", []),
+                    "content_focus": self.profile.get("content_focus", self.profile.get("topics", [])),
+                    "custom_sources": self.profile.get("custom_sources", []),
+                    "x_accounts": self.profile.get("x_accounts", []),
                 }
             self._log(f"   👤 CEO: {ceo_profile.get('name')} ({ceo_profile.get('company')})")
 

@@ -69,6 +69,9 @@ def main():
         "expertise": profile.get("expertise", {}),
         "banned_words": profile.get("banned_words", []),
         "preferred_words": profile.get("preferred_words", []),
+        "content_focus": profile.get("content_focus", profile.get("topics", [])),
+        "custom_sources": profile.get("custom_sources", []),
+        "x_accounts": profile.get("x_accounts", []),
     }
 
     # Optionally overlay Obsidian data if connected

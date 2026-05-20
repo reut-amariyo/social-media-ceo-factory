@@ -1,9 +1,13 @@
 #!/bin/bash
-# Launch the Branding Factory app with logs visible in terminal
+# 🏭 Personal Branding Factory — Quick Launch (macOS/Linux)
+# Double-click this file or run: bash launch_app.sh
 
-cd /Users/tal/projects/social-media-ceo-factory
-open -a /Users/tal/projects/social-media-ceo-factory/BrandingFactory.app
+cd "$(dirname "$0")"
 
-echo "🏭 Branding Factory launched!"
-echo "The app window should appear shortly."
-echo "Close this terminal when done."
+# Check if profile exists
+if [ ! -f "profile.yaml" ]; then
+    echo "⚠️  No profile found! Running setup wizard..."
+    python3 setup_profile.py
+fi
+
+python3 app.py

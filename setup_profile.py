@@ -106,6 +106,28 @@ def run_setup():
     preferred_raw = input("Preferred words: ").strip()
     preferred_words = [w.strip() for w in preferred_raw.split(",") if w.strip()] if preferred_raw else []
 
+    # --- Content Focus ---
+    print()
+    print("─" * 40)
+    print("🔎 CONTENT FOCUS (what should the Scout look for?)")
+    print("─" * 40)
+    print("Keywords the Scout uses to filter trending news for you.")
+    print("Comma-separated. Press Enter to use your topics as focus.")
+    print("Example: AI agents, developer tools, SaaS infrastructure")
+    focus_raw = input("Content focus: ").strip()
+    content_focus = [f.strip() for f in focus_raw.split(",") if f.strip()] if focus_raw else topics
+
+    # --- X Accounts ---
+    print()
+    print("─" * 40)
+    print("🐦 X ACCOUNTS TO MONITOR (optional)")
+    print("─" * 40)
+    print("Usernames (without @) of people in your space, comma-separated.")
+    print("Example: swyx, sama, patio11")
+    print("Press Enter to skip.")
+    x_raw = input("X accounts: ").strip()
+    x_accounts = [a.strip().lstrip("@") for a in x_raw.split(",") if a.strip()] if x_raw else []
+
     # --- Build profile ---
     profile = {
         "name": name,
@@ -118,6 +140,8 @@ def run_setup():
         "expertise": expertise,
         "banned_words": banned_words,
         "preferred_words": preferred_words,
+        "content_focus": content_focus,
+        "x_accounts": x_accounts,
     }
 
     # Save
