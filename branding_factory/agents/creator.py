@@ -14,19 +14,24 @@ from utils.obsidian_io import get_learning_log, get_past_posts
 
 XAI_API_KEY = os.getenv("XAI_API_KEY")
 
-# Load platform writing skill at import time
-SKILL_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 
-                          "..", "..", "agents_information", "skills", "creator_platform_guide.md")
-PLATFORM_SKILL = ""
-if os.path.exists(SKILL_PATH):
-    with open(SKILL_PATH) as f:
-        PLATFORM_SKILL = f.read()
-else:
+# Load skills at import time
+def _load_skill(filename: str) -> str:
+    """Load a skill file from agents_information/skills/."""
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                        "..", "..", "agents_information", "skills", filename)
+    if os.path.exists(path):
+        with open(path) as f:
+            return f.read()
     # Try alternate path (running from project root)
-    alt_path = os.path.join("agents_information", "skills", "creator_platform_guide.md")
+    alt_path = os.path.join("agents_information", "skills", filename)
     if os.path.exists(alt_path):
         with open(alt_path) as f:
-            PLATFORM_SKILL = f.read()
+            return f.read()
+    return ""
+
+PLATFORM_SKILL = _load_skill("creator_platform_guide.md")
+HOOK_WRITING_SKILL = _load_skill("hook_writing.md")
+STORYTELLING_SKILL = _load_skill("storytelling.md")
 
 
 def _generate_with_best_llm(prompt: str, agent_name: str = "Creator") -> str:
@@ -117,6 +122,10 @@ Do a final scan of your output. If ANY of these words appear, replace them immed
     # Load the platform writing skill guide
     platform_guide = PLATFORM_SKILL if PLATFORM_SKILL else "Write platform-native posts for X (280 chars max), LinkedIn (3-8 paragraphs), and Instagram (5-slide carousel + caption)."
 
+    # Load additional skills
+    hook_skill = HOOK_WRITING_SKILL
+    story_skill = STORYTELLING_SKILL
+
     prompt = f"""You are {ceo_name}'s personal copywriter. Write in their EXACT voice.
 
 === YOUR SKILL: PLATFORM WRITING GUIDE ===
@@ -124,6 +133,16 @@ Read this CAREFULLY. It defines how you write for each platform.
 Follow these rules precisely — each platform must be DISTINCT, not cross-posted.
 
 {platform_guide}
+
+=== YOUR SKILL: HOOK WRITING ===
+Use these techniques for opening lines. Every post MUST start with a strong hook.
+
+{hook_skill}
+
+=== YOUR SKILL: STORYTELLING ===
+When the idea lends itself to narrative, apply this framework.
+
+{story_skill}
 
 === CEO VOICE DNA ===
 {voice_section}
