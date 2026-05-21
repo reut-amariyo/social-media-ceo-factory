@@ -61,43 +61,86 @@ def human_approval_node(state: dict):
 # Save final output to Obsidian
 # ============================================================
 def save_to_obsidian_node(state: dict):
-    """Save the validated drafts to Obsidian's Drafts folder."""
-    print("--- 📂 SAVING TO OBSIDIAN ---")
+    """Save the validated drafts — rich local output + optional Obsidian."""
+    print("--- 📂 SAVING RESULTS ---")
 
     drafts = state.get("post_drafts", {})
     trend = state.get("selected_idea", "")
     image_path = state.get("image_path", "")
+    ideas = state.get("ideas", [])
+    trend_report = state.get("trend_report", "")
+    scores = state.get("validation_results", "")
+    ceo = state.get("ceo_profile", {})
+    iteration_count = state.get("iteration_count", 0)
 
+    # Always save rich local output
+    output_path = _save_rich_output(
+        drafts=drafts,
+        selected_idea=trend,
+        ideas=ideas,
+        trend_report=trend_report,
+        scores=scores,
+        image_path=image_path,
+        ceo_name=ceo.get("name", ""),
+        iteration_count=iteration_count,
+    )
+    print(f"   ✅ Full run saved to: {output_path}")
+
+    # Also try Obsidian (optional)
     filepath = save_drafts_to_obsidian(drafts, trend, image_path)
-
     if filepath:
-        print(f"   ✅ All drafts saved! Open Obsidian to review and edit.")
-    else:
-        # Save locally as fallback
-        print("   ⚠️  Could not save to Obsidian. Saving locally...")
-        _save_local_fallback(drafts, trend, image_path)
+        print(f"   ✅ Also saved to Obsidian vault")
 
     return state
 
 
-def _save_local_fallback(drafts: dict, trend: str, image_path: str):
-    """Save drafts locally if Obsidian isn't available."""
+def _save_rich_output(drafts: dict, selected_idea: str, ideas: list,
+                      trend_report: str, scores: str, image_path: str,
+                      ceo_name: str, iteration_count: int) -> str:
+    """Save a complete run to a timestamped folder for easy review."""
     import os
+    import shutil
     from datetime import datetime
 
-    os.makedirs("outputs", exist_ok=True)
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filepath = f"outputs/draft_{timestamp}.md"
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M")
+    run_dir = os.path.join("outputs", timestamp)
+    os.makedirs(run_dir, exist_ok=True)
 
-    with open(filepath, "w") as f:
-        f.write(f"# Social Media Drafts\n\n")
-        f.write(f"**Topic:** {trend}\n\n")
-        for platform, content in drafts.items():
-            f.write(f"## {platform.upper()}\n\n{content}\n\n")
+    # 1. Run Summary
+    with open(os.path.join(run_dir, "run_summary.md"), "w") as f:
+        f.write(f"# 🏭 Branding Factory Run — {timestamp}\n\n")
+        f.write(f"**User:** {ceo_name}\n")
+        f.write(f"**Date:** {datetime.now().strftime('%B %d, %Y at %H:%M')}\n")
+        f.write(f"**Iterations:** {iteration_count}\n\n")
+        f.write(f"## Selected Idea\n\n{selected_idea}\n\n")
+        f.write(f"## Validation Scores\n\n{scores}\n\n")
         if image_path:
-            f.write(f"## Image\n\n![image]({image_path})\n")
+            f.write(f"## Image\n\n![Generated Image]({os.path.basename(image_path)})\n")
 
-    print(f"   ✅ Saved locally to: {filepath}")
+    # 2. All Ideas (for reference)
+    with open(os.path.join(run_dir, "ideas.md"), "w") as f:
+        f.write(f"# 💡 Content Ideas — {timestamp}\n\n")
+        f.write("These are all the ideas the Ideator proposed.\n\n")
+        for i, idea in enumerate(ideas, 1):
+            f.write(f"---\n\n### Idea {i}\n\n{idea}\n\n")
+
+    # 3. Final Drafts (the main deliverable)
+    with open(os.path.join(run_dir, "drafts.md"), "w") as f:
+        f.write(f"# ✍️ Final Drafts — {timestamp}\n\n")
+        f.write(f"**Based on:** {selected_idea[:200]}\n\n")
+        for platform, content in drafts.items():
+            f.write(f"---\n\n## {platform.upper()}\n\n{content}\n\n")
+
+    # 4. Trend Report (what the Scout found)
+    with open(os.path.join(run_dir, "trends.md"), "w") as f:
+        f.write(f"# 🔍 Trend Report — {timestamp}\n\n")
+        f.write(trend_report)
+
+    # 5. Copy image to the run folder
+    if image_path and os.path.exists(image_path):
+        shutil.copy2(image_path, run_dir)
+
+    return run_dir
 
 
 # ============================================================

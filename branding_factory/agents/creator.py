@@ -1,7 +1,7 @@
 """
 Creator Agent — Copywriter (Social Media)
 ===========================================
-Generates multi-platform drafts in Lior Pozin's exact voice.
+Generates multi-platform drafts in the CEO's exact voice.
 Based on A-agents/copywriter-agent-social.md from the ABC-TOM v5 system.
 
 Follows the 12-section style guide:
@@ -52,7 +52,7 @@ def run_creator_agent(state: dict):
     print("--- ✍️ AGENT: CREATOR (Copywriter — Writing in Lior's Voice) ---")
 
     ceo = state.get("ceo_profile", {})
-    ceo_name = ceo.get("name", "Lior Pozin")
+    ceo_name = ceo.get("name", "Unknown")
     tone = ceo.get("tone", "Direct, bold, eye-level, no-BS")
 
     selected_idea = state.get("selected_idea", "")

@@ -28,8 +28,21 @@ env/
 # Generated outputs
 outputs/
 
-# Model cache (SDXL can be huge)
+# Personal data — NEVER commit these
+profile.yaml
+obsidian_vault_template/filled/
+claude_code/reut-workspace/
+
+# Internal dev docs (not needed for users)
+IDEATOR_SIMPLIFICATION.md
+SCOUT_REFACTORING_REUT_FEEDBACK.md
+UI_ENHANCEMENT_SCOUT.md
+test_ai_sources.py
+
+# Model files (large)
+*.ckpt
 *.safetensors
+*.bin
 *.ckpt
 *.bin
 model_cache/

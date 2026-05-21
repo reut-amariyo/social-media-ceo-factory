@@ -1,23 +1,23 @@
 #!/usr/bin/env python3
 """
-🏭 Lior Pozin's Personal Branding Factory
+🏭 Personal Branding Factory
 ==========================================
-Agentic system that generates personalized social media content.
-Built for Lior Pozin — CEO of AutoDS (acquired by Fiverr), BuildYourStore.ai, CreateUGC.AI.
-Operated by Reut on her Mac.
+Agentic AI system that generates personalized social media content
+for any CEO / founder / thought leader.
 
 Usage:
-    python main.py
+    python setup_profile.py   (first time — sets up your profile)
+    python main.py            (run the factory)
 
 Flow:
-    1. Load Context (Obsidian vault: Voice DNA + ICP + learning log)
-    2. Scout (Google + Grok → trending topics, filtered for Lior's focus areas)
+    1. Load Context (profile.yaml + optional Obsidian vault)
+    2. Scout (Google + Grok → trending topics, filtered for your focus areas)
     3. Ideator (filter trends → 3 content angles with narrative hooks)
-    4. Human Checkpoint (Reut picks her favorite)
-    5. Creator (multi-platform drafts: X, LinkedIn, Instagram — in Lior's voice)
-    6. Validator (quality control: eye-level tone, vocabulary, brand alignment)
-    7. Graphic Artist (generate image with SDXL on M4)
-    8. Save to Obsidian (O-output/ with ABC-TOM naming convention)
+    4. Human Checkpoint (you pick your favorite)
+    5. Creator (multi-platform drafts: X, LinkedIn, Instagram — in your voice)
+    6. Validator (quality control: tone, vocabulary, brand alignment)
+    7. Graphic Artist (generate image with SDXL locally)
+    8. Save output
 """
 
 import os
@@ -32,43 +32,56 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from core.orchestrator import create_factory_graph
 from utils.obsidian_io import test_connection, get_ceo_profile
+from setup_profile import load_profile
 
 
 def main():
+    # Load profile from profile.yaml
+    profile = load_profile()
+    
+    if not profile:
+        print("⚠️  No profile found! Run the setup wizard first:\n")
+        print("    python setup_profile.py\n")
+        sys.exit(1)
+
+    ceo_name = profile.get("name", "Unknown")
+    
     print("=" * 60)
-    print("🏭 LIOR POZIN'S BRANDING FACTORY")
+    print(f"🏭 {ceo_name.upper()}'S BRANDING FACTORY")
     print("=" * 60)
     print()
 
-    # Step 1: Test Obsidian Connection
+    # Step 1: Test Obsidian Connection (optional enhancement)
     print("🔌 Checking Obsidian Vault...")
     vault_connected = test_connection()
     print()
 
-    # Step 2: Load CEO Profile
-    print("👤 Loading CEO Profile...")
-    if vault_connected:
-        ceo_profile = get_ceo_profile()
-    else:
-        ceo_profile = {}
+    # Step 2: Build CEO Profile from profile.yaml (primary) + Obsidian (optional overlay)
+    print("👤 Loading Profile...")
+    ceo_profile = {
+        "name": profile.get("name"),
+        "company": profile.get("company"),
+        "role": profile.get("role", "CEO"),
+        "industry": profile.get("industry", ""),
+        "topics": profile.get("topics", []),
+        "tone": profile.get("tone", "Direct, bold, eye-level"),
+        "stories": profile.get("stories", []),
+        "expertise": profile.get("expertise", {}),
+        "banned_words": profile.get("banned_words", []),
+        "preferred_words": profile.get("preferred_words", []),
+        "content_focus": profile.get("content_focus", profile.get("topics", [])),
+        "custom_sources": profile.get("custom_sources", []),
+        "x_accounts": profile.get("x_accounts", []),
+    }
 
-    if not ceo_profile:
-        print("   ⚠️  Using fallback CEO profile (update Obsidian vault for personalization)")
-        ceo_profile = {
-            "name": "Lior Pozin",
-            "company": "AutoDS",
-            "role": "CEO & Serial Entrepreneur",
-            "industry": "E-commerce, SaaS, AI",
-            "topics": [
-                "Scaling",
-                "Pricing Strategy",
-                "Revenue Upselling",
-                "Growth Hacking",
-                "Branding",
-                "AI in Business",
-            ],
-            "tone": "Direct, bold, eye-level, no-BS, action-oriented",
-        }
+    # Optionally overlay Obsidian data if connected
+    if vault_connected:
+        obsidian_profile = get_ceo_profile()
+        if obsidian_profile:
+            # Obsidian enriches but doesn't override profile.yaml
+            for key, val in obsidian_profile.items():
+                if val and not ceo_profile.get(key):
+                    ceo_profile[key] = val
 
     print(f"   👤 CEO: {ceo_profile.get('name')}")
     print(f"   🏢 Company: {ceo_profile.get('company')}")

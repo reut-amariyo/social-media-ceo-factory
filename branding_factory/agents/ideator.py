@@ -42,8 +42,8 @@ def run_ideator_agent(state: dict):
     print("--- 💡 AGENT: IDEATOR (Brainstorming Content Angles) ---")
 
     ceo = state.get("ceo_profile", {})
-    ceo_name = ceo.get("name", "Lior Pozin")
-    company = ceo.get("company", "AutoDS")
+    ceo_name = ceo.get("name", "Unknown")
+    company = ceo.get("company", "")
     industry = ceo.get("industry", "E-commerce, SaaS, AI")
     topics = ceo.get("topics", [])
     tone = ceo.get("tone", "Direct, bold, eye-level, no-BS")
@@ -94,14 +94,14 @@ TODAY'S STRATEGIC BRIEF FROM SCOUT:
 CRITICAL INSTRUCTION: Every idea MUST be directly based on the Scout findings above.
 - Use the AI company news (Section 1)
 - Use the trending X posts (Section 2)
-- Connect Lior's AutoDS/eBay experience to what's happening NOW
+- Connect {ceo_name}'s {company} experience to what's happening NOW
 
 Propose 5-7 content ideas. Keep it ULTRA SIMPLE - just 2 fields per idea.
 
 Format for each idea:
 
 IDEA [N]:
-The idea: [One punchy sentence connecting Scout finding to Lior's experience]
+The idea: [One punchy sentence connecting Scout finding to {ceo_name}'s experience]
 
 Hook: [The scroll-stopping opening line - make it provocative]
 
@@ -111,21 +111,21 @@ RULES:
 1. Every idea MUST reference a specific Scout finding
 2. Keep it SHORT and PUNCHY
 3. Make it CONTROVERSIAL or surprising
-4. Only Lior can say this (AutoDS $150M GMV, eBay scaling, AI automation)
+4. Only {ceo_name} can say this (their unique experience at {company})
 5. Generate 5-7 ideas (at least 5, up to 7)
 
 Example of GOOD format:
 IDEA 1:
-The idea: Anthropic just released 200K context - I've been using it to automate customer support at AutoDS scale.
+The idea: [A specific news item] - I've been applying this at {company} with real results.
 
-Hook: "I just replaced 3 support agents with Claude's 200K context window. Our response time went from 4 hours to 4 seconds."
+Hook: "I just [specific bold claim with numbers]. [Surprising outcome]."
 
 ---
 
 IDEA 2:
-The idea: Everyone's freaking out about AI pricing - but at AutoDS we're charging MORE for AI features and customers love it.
+The idea: Everyone's doing X - but at {company} we did the opposite and it worked.
 
-Hook: "Hot take: If your AI features aren't expensive, they're not valuable. We 3x'd our price when we added AI and churn went DOWN."
+Hook: "Hot take: [Contrarian statement]. We [specific action] and [specific result]."
 
 Return 5-7 ideas. Each must connect to a Scout finding."""
 

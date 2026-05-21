@@ -99,24 +99,17 @@ AI_COMPANY_SOURCES = {
     "cohere_blog": "https://cohere.com/blog",  # Will scrape
 }
 
-# Lior's expertise areas (for mapping trends)
-LIOR_EXPERTISE = {
-    "saas_pricing": "Scaled AutoDS using outcome-based pricing, not cost-plus",
-    "ai_automation": "Built AI-powered product research that processed millions of listings",
-    "growth_hacking": "Grew from $0 to 8 figures using viral loops and upselling",
-    "competitor_acquisition": "Acquired 4 competitors (DSM-Tool, ViralVault, Salefreaks, Yaballe)",
-    "bootstrapping": "Bootstrapped to $20M ARR before acquisition",
-    "ecommerce_ops": "Ran dropshipping operations at $150M+ GMV",
-}
 
-# Lior's story moments (for connecting to trends)
-LIOR_STORIES = [
-    "Age 14: Found TinyDeal-eBay arbitrage, made first $40 profit",
-    "Age 21: eBay blocked account, built automation → became AutoDS",
-    "VAT Crisis: Took a loan, created $30K/month mentorship program",
-    "Rejected PE Deal: Walked away 1 day before closing (cultural misalignment)",
-    "Fiverr Acquisition: First dropshipping software acquired by public company",
-]
+def _get_ceo_expertise(state: dict) -> dict:
+    """Get CEO expertise from profile (dynamic, not hardcoded)."""
+    ceo = state.get("ceo_profile", {})
+    return ceo.get("expertise", {})
+
+
+def _get_ceo_stories(state: dict) -> list:
+    """Get CEO story moments from profile (dynamic, not hardcoded)."""
+    ceo = state.get("ceo_profile", {})
+    return ceo.get("stories", [])
 
 
 def _generate_with_grok(prompt: str, agent_name: str = "Scout") -> str:
@@ -244,20 +237,25 @@ def _scrape_company_news(name: str, url: str, max_items: int = 3) -> list[dict]:
         return []
 
 
-def _get_top_x_posts_about_ai_saas() -> str:
-    """Use Grok to get the top 5-7 X posts about AI in SaaS with highest engagement."""
+def _get_top_x_posts_about_ai_saas(content_focus: str = "AI in SaaS", x_accounts: list = None) -> str:
+    """Use Grok to get the top 5-7 X posts about the user's content focus."""
     if not XAI_API_KEY:
         return ""
     
-    prompt = """You are Grok with real-time X (Twitter) access.
+    accounts_section = ""
+    if x_accounts:
+        accounts_section = f"\nAlso check recent posts from: {', '.join(f'@{a}' for a in x_accounts)}"
+    
+    prompt = f"""You are Grok with real-time X (Twitter) access.
 
-Find the TOP 5-7 POSTS from the LAST 24-48 HOURS about AI in SaaS.
+Find the TOP 5-7 POSTS from the LAST 24-48 HOURS about: {content_focus}
 
 CRITICAL FILTERS:
-- Focus: AI in SaaS (AI features in SaaS products, AI tools for SaaS companies, AI-powered SaaS)
+- Focus: {content_focus}
 - Sort by: Highest engagement (likes + retweets + replies combined)
 - Only posts with 1000+ total engagement
-- Skip: Generic AI hype, consumer AI apps, AI research papers
+- Skip: Generic hype, unrelated topics
+{accounts_section}
 
 For each post, return:
 1. @username
@@ -270,12 +268,7 @@ Format:
 ---
 @username · 2 hours ago · (15.2K engagement)
 "Post text here..."
-Why trending: Product Hunt launch of AI copilot for SaaS got massive traction
-
----
-@username2 · yesterday · (12.8K engagement)
-"Post text..."
-Why trending: CEO shared revenue numbers from AI features
+Why trending: [reason]
 
 Keep it CONCISE. Return exactly 5-7 posts. ALWAYS include the timestamp (when posted)."""
 
@@ -330,13 +323,19 @@ def run_scout_agent(state: dict):
     print("--- 🔍 AGENT: SCOUT (Tech Pulse Radar) ---")
     
     ceo = state.get("ceo_profile", {})
-    ceo_name = ceo.get("name", "Lior Pozin")
-    company = ceo.get("company", "AutoDS")
+    ceo_name = ceo.get("name", "Unknown")
+    company = ceo.get("company", "")
     topics = ceo.get("topics", ["SaaS", "AI", "Scaling"])
     topic_context = ", ".join(topics) if isinstance(topics, list) else str(topics)
+    content_focus = ceo.get("content_focus", topics)  # What to filter for
+    content_focus_str = ", ".join(content_focus) if isinstance(content_focus, list) else str(content_focus)
+    custom_sources = ceo.get("custom_sources", [])  # User's extra RSS feeds
+    x_accounts = ceo.get("x_accounts", [])  # User's X accounts to monitor
     
     print(f"   👤 CEO: {ceo_name} | Company: {company}")
     print(f"   🎯 Focus: {topic_context}")
+    if content_focus != topics:
+        print(f"   🔎 Content filter: {content_focus_str}")
     
     # === PHASE 1: Multi-Source Scan (Parallel) ===
     print("\n   🌐 PHASE 1: Scanning tech sources...")
@@ -384,6 +383,12 @@ def run_scout_agent(state: dict):
         # Hugging Face papers
         futures[executor.submit(_fetch_huggingface_papers, 5)] = "huggingface"
         
+        # User's custom RSS sources from profile.yaml
+        for src in custom_sources:
+            if src.get("type") == "rss" and src.get("url"):
+                src_name = src.get("name", "custom")
+                futures[executor.submit(_fetch_rss_feed, src_name, src["url"], 5)] = src_name
+        
         for future in as_completed(futures):
             source_name = futures[future]
             try:
@@ -395,12 +400,12 @@ def run_scout_agent(state: dict):
     
     print(f"   📊 Total sources collected: {len(all_sources)}")
     
-    # === PHASE 2: Top X Posts About AI in SaaS ===
-    print("\n   🐦 PHASE 2: Finding top X posts about AI in SaaS...")
+    # === PHASE 2: Top X Posts About User's Content Focus ===
+    print(f"\n   🐦 PHASE 2: Finding top X posts about {content_focus_str[:50]}...")
     print("      🔥 Filtering by highest engagement (1000+ interactions)")
-    print("      🎯 Focus: AI features, AI-powered SaaS, AI in SaaS companies")
+    print(f"      🎯 Focus: {content_focus_str[:80]}")
     
-    top_x_posts = _get_top_x_posts_about_ai_saas()
+    top_x_posts = _get_top_x_posts_about_ai_saas(content_focus_str, x_accounts)
     if top_x_posts:
         print("      ✅ Found top 5-7 posts")
     else:
@@ -409,10 +414,14 @@ def run_scout_agent(state: dict):
     # === PHASE 3: Generate Two Separate Sections ===
     print("\n   📝 PHASE 3: Generating structured trend report...")
     
-    # Filter for AI in SaaS news with timestamps
+    # Filter news by user's content focus keywords
+    focus_keywords = [kw.lower().strip() for kw in content_focus] if isinstance(content_focus, list) else [w.strip().lower() for w in content_focus_str.split(",")]
+    # Always include generic tech keywords as baseline
+    filter_keywords = focus_keywords + ['ai', 'openai', 'anthropic', 'microsoft', 'google']
+    
     ai_saas_news = [item for item in all_sources if any(
         keyword in item.get('title', '').lower() or keyword in item.get('source', '').lower()
-        for keyword in ['ai', 'openai', 'anthropic', 'microsoft', 'google', 'saas']
+        for keyword in filter_keywords
     )]
     
     # Include timestamps and sources in the summary
@@ -422,9 +431,9 @@ def run_scout_agent(state: dict):
         for item in ai_saas_news[:15]
     )
     
-    final_brief_prompt = f"""You are a trend analyst for Lior Pozin, CEO of AutoDS (acquired by Fiverr).
+    final_brief_prompt = f"""You are a trend analyst for {ceo_name}, {ceo.get('role', 'CEO')} of {company}.
 
-FOCUS: AI in SaaS (AI features in SaaS products, AI-powered SaaS tools, AI transforming SaaS companies)
+FOCUS: {topic_context}
 
 AI COMPANY NEWS & RESEARCH (WITH TIMESTAMPS):
 {ai_news_summary[:2500]}
@@ -432,11 +441,9 @@ AI COMPANY NEWS & RESEARCH (WITH TIMESTAMPS):
 TOP X POSTS ABOUT AI IN SAAS (HIGHEST ENGAGEMENT):
 {top_x_posts[:2500]}
 
-Lior's Background:
-- Built AutoDS (dropshipping SaaS with AI automation) from $0 → $20M ARR → Acquired by Fiverr
-- Used AI for product research automation, pricing optimization
-- Bootstrapped, then acquired 4 competitors
-- E-commerce operations at $150M+ GMV
+{ceo_name}'s Background:
+{chr(10).join(f'- {s}' for s in _get_ceo_stories(state)) if _get_ceo_stories(state) else f'- {ceo.get("role", "CEO")} at {company} in {ceo.get("industry", "tech")}'}
+Expertise: {', '.join(f'{k}: {v}' for k, v in _get_ceo_expertise(state).items()) if _get_ceo_expertise(state) else topic_context}
 
 TASK: Create a structured trend report with TWO sections:
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-🏭 Lior Pozin's Branding Factory — Desktop App
+🏭 Personal Branding Factory — Desktop App
 =================================================
 A visual GUI for Reut to run the branding factory
 without touching the terminal.
@@ -72,7 +72,13 @@ COLORS = {
 class BrandingFactoryApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Lior Pozin's Branding Factory")
+        
+        # Load profile
+        from setup_profile import load_profile
+        self.profile = load_profile()
+        self.ceo_name = self.profile.get("name", "Your") if self.profile else "Your"
+        
+        self.root.title(f"{self.ceo_name}'s Branding Factory")
         self.root.geometry("900x700")
         self.root.configure(bg=COLORS["bg"])
         self.root.minsize(800, 600)
@@ -108,7 +114,7 @@ class BrandingFactoryApp:
 
         title = tk.Label(
             header,
-            text="🏭  Lior Pozin's Branding Factory",
+            text=f"🏭  {self.ceo_name}'s Branding Factory",
             font=("Helvetica Neue", 22, "bold"),
             fg=COLORS["text"],
             bg=COLORS["surface"],
@@ -410,7 +416,7 @@ class BrandingFactoryApp:
         
         note = tk.Label(
             note_frame,
-            text="💡 Connection: The ideas below were generated from these trends. See how the Ideator connected them to Lior's experience.",
+            text="💡 Connection: The ideas below were generated from these trends. See how the Ideator connected them to your experience.",
             font=("Helvetica Neue", 10, "italic"),
             fg=COLORS["warning"],
             bg=COLORS["surface"],
@@ -1128,7 +1134,7 @@ class BrandingFactoryApp:
 
         text = tk.Label(
             footer,
-            text="Built for Lior Pozin  •  Powered by Ollama + SerpAPI + Grok  •  Operated by Reut",
+            text="Powered by Ollama + SerpAPI + Grok  •  Personal Branding Factory",
             font=("Helvetica Neue", 10),
             fg=COLORS["text_dim"],
             bg=COLORS["surface"],
@@ -1187,17 +1193,23 @@ class BrandingFactoryApp:
             else:
                 self._log("   ⚠️  Vault not found — using fallback defaults")
 
-            self._set_progress(10, "👤 Loading CEO profile...")
+            self._set_progress(10, "👤 Loading profile...")
             ceo_profile = get_ceo_profile() if vault_connected else {}
-            if not ceo_profile:
+            if not ceo_profile and self.profile:
                 ceo_profile = {
-                    "name": "Lior Pozin",
-                    "company": "AutoDS",
-                    "role": "CEO & Serial Entrepreneur",
-                    "industry": "E-commerce, SaaS, AI",
-                    "topics": ["Scaling", "Pricing Strategy", "Revenue Upselling",
-                               "Growth Hacking", "Branding", "AI in Business"],
-                    "tone": "Direct, bold, eye-level, no-BS, action-oriented",
+                    "name": self.profile.get("name", "Unknown"),
+                    "company": self.profile.get("company", ""),
+                    "role": self.profile.get("role", "CEO"),
+                    "industry": self.profile.get("industry", ""),
+                    "topics": self.profile.get("topics", ["AI", "Business"]),
+                    "tone": self.profile.get("tone", "Direct, bold, eye-level"),
+                    "stories": self.profile.get("stories", []),
+                    "expertise": self.profile.get("expertise", {}),
+                    "banned_words": self.profile.get("banned_words", []),
+                    "preferred_words": self.profile.get("preferred_words", []),
+                    "content_focus": self.profile.get("content_focus", self.profile.get("topics", [])),
+                    "custom_sources": self.profile.get("custom_sources", []),
+                    "x_accounts": self.profile.get("x_accounts", []),
                 }
             self._log(f"   👤 CEO: {ceo_profile.get('name')} ({ceo_profile.get('company')})")
 
@@ -1264,7 +1276,7 @@ class BrandingFactoryApp:
         """Run Creator → Validator loop → Graphic Artist → show review screen (Reut decides)."""
         try:
             # --- Step 5: Creator ---
-            self._set_progress(55, "✍️ Creator: Writing drafts in Lior's voice...")
+            self._set_progress(55, "✍️ Creator: Writing drafts in your voice...")
             self._log("\n✍️ CREATOR: Writing multi-platform drafts (with self-check)...")
             from branding_factory.agents.creator import run_creator_agent
             creator_result = run_creator_agent(self.state)

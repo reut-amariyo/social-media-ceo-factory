@@ -29,7 +29,7 @@ from datetime import datetime
 # ============================================================
 # Vault paths — mapped to ABC-TOM v5 structure
 # ============================================================
-VAULT_PATH = os.getenv("OBSIDIAN_VAULT_PATH", "/Users/reut/Documents/MyObsidianVault")
+VAULT_PATH = os.getenv("OBSIDIAN_VAULT_PATH", "")  # Empty = disabled unless explicitly set
 SYSTEM_DIR = os.getenv("OBSIDIAN_SYSTEM_DIR", "the-system-v5")  # root of the ABC-TOM system
 
 # C-core: Brand foundation
@@ -69,6 +69,9 @@ def _vault_path(*parts: str) -> str:
 
 def test_connection() -> bool:
     """Test if the Obsidian vault and ABC-TOM system directory are accessible."""
+    if not VAULT_PATH:
+        print("   ⏭️  No Obsidian vault configured (optional — using profile.yaml only)")
+        return False
     if not os.path.isdir(VAULT_PATH):
         print(f"   ❌ Obsidian vault NOT found at: {VAULT_PATH}")
         print(f"   💡 Set OBSIDIAN_VAULT_PATH in .env")

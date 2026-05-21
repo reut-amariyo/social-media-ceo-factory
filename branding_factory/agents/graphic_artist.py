@@ -36,15 +36,26 @@ def run_graphic_agent(state: dict):
 
     try:
         from diffusers import StableDiffusionXLPipeline
+        import platform
 
-        device = "mps"  # Apple M4 Metal Performance Shaders
+        # Auto-detect best device: MPS (Apple), CUDA (NVIDIA), or CPU
+        if torch.backends.mps.is_available():
+            device = "mps"
+            print("   🍎 Using Apple MPS (Metal)")
+        elif torch.cuda.is_available():
+            device = "cuda"
+            print("   🟢 Using NVIDIA CUDA")
+        else:
+            device = "cpu"
+            print("   ⚠️ Using CPU (slow — consider installing CUDA or using Mac)")
+
         model_id = "stabilityai/stable-diffusion-xl-base-1.0"
 
         print("   ⏳ Loading SDXL model (this may take a moment on first run)...")
         pipe = StableDiffusionXLPipeline.from_pretrained(
             model_id,
-            torch_dtype=torch.float16,
-            variant="fp16",
+            torch_dtype=torch.float16 if device != "cpu" else torch.float32,
+            variant="fp16" if device != "cpu" else None,
             use_safetensors=True,
         )
         pipe = pipe.to(device)
