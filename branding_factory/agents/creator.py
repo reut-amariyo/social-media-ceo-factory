@@ -2,12 +2,9 @@
 Creator Agent — Copywriter (Social Media)
 ===========================================
 Generates multi-platform drafts in the CEO's exact voice.
-Based on A-agents/copywriter-agent-social.md from the ABC-TOM v5 system.
+Loads platform-specific writing skills from agents_information/skills/creator_platform_guide.md
 
-Follows the 12-section style guide:
-1. Hook Types  2. Sentence Architecture  3. Paragraph Rules  4. Structural Rules
-5. Transitions  6. Vocabulary  7. Punctuation  8. Pronouns  9. Emotional Texture
-10. Ending Patterns  11. Eye-Level Tone  12. Owner Editing Rules
+The Creator MUST read and follow the platform guide before writing any content.
 """
 
 import os
@@ -16,6 +13,20 @@ from openai import OpenAI
 from utils.obsidian_io import get_learning_log, get_past_posts
 
 XAI_API_KEY = os.getenv("XAI_API_KEY")
+
+# Load platform writing skill at import time
+SKILL_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 
+                          "..", "..", "agents_information", "skills", "creator_platform_guide.md")
+PLATFORM_SKILL = ""
+if os.path.exists(SKILL_PATH):
+    with open(SKILL_PATH) as f:
+        PLATFORM_SKILL = f.read()
+else:
+    # Try alternate path (running from project root)
+    alt_path = os.path.join("agents_information", "skills", "creator_platform_guide.md")
+    if os.path.exists(alt_path):
+        with open(alt_path) as f:
+            PLATFORM_SKILL = f.read()
 
 
 def _generate_with_best_llm(prompt: str, agent_name: str = "Creator") -> str:
@@ -37,9 +48,8 @@ def _generate_with_best_llm(prompt: str, agent_name: str = "Creator") -> str:
     return response["response"]
 
 
-# Lior's vocabulary rules — embedded from voice-dna.md
-VOCAB_USE = '"real," "just," "precisely," "A LOT" (caps), "gold," "ruthlessly," "noise," "infrastructure"'
-VOCAB_NEVER = '"leverage," "optimize," "synergize," "innovative," "hustle," "grind," "journey," "passionate about," "excited to announce"'
+# Vocabulary rules — loaded from profile or defaults
+VOCAB_NEVER_DEFAULT = '"leverage," "optimize," "synergize," "innovative," "hustle," "grind," "journey," "passionate about," "excited to announce"'
 
 
 def run_creator_agent(state: dict):
@@ -49,11 +59,13 @@ def run_creator_agent(state: dict):
     - Uses Voice DNA + past posts for exact style mimicking
     - Generates: X post, LinkedIn post, Instagram carousel
     """
-    print("--- ✍️ AGENT: CREATOR (Copywriter — Writing in Lior's Voice) ---")
+    print("--- ✍️ AGENT: CREATOR (Copywriter — Writing in Your Voice) ---")
 
     ceo = state.get("ceo_profile", {})
     ceo_name = ceo.get("name", "Unknown")
     tone = ceo.get("tone", "Direct, bold, eye-level, no-BS")
+    banned_words = ceo.get("banned_words", [])
+    preferred_words = ceo.get("preferred_words", [])
 
     selected_idea = state.get("selected_idea", "")
     trend_report = state.get("trend_report", "")
@@ -97,48 +109,34 @@ Do a final scan of your output. If ANY of these words appear, replace them immed
 
     # Voice DNA excerpt (truncate to fit context window)
     voice_section = voice_dna[:3000] if voice_dna else ""
+    
+    # Build vocabulary rules from profile
+    vocab_never = ', '.join(f'"{w}"' for w in banned_words) if banned_words else VOCAB_NEVER_DEFAULT
+    vocab_use = ', '.join(f'"{w}"' for w in preferred_words) if preferred_words else ""
 
-    prompt = f"""You are {ceo_name}'s personal copywriter. Write in his EXACT voice.
+    # Load the platform writing skill guide
+    platform_guide = PLATFORM_SKILL if PLATFORM_SKILL else "Write platform-native posts for X (280 chars max), LinkedIn (3-8 paragraphs), and Instagram (5-slide carousel + caption)."
 
-=== VOICE DNA (follow these rules EXACTLY) ===
+    prompt = f"""You are {ceo_name}'s personal copywriter. Write in their EXACT voice.
+
+=== YOUR SKILL: PLATFORM WRITING GUIDE ===
+Read this CAREFULLY. It defines how you write for each platform.
+Follow these rules precisely — each platform must be DISTINCT, not cross-posted.
+
+{platform_guide}
+
+=== CEO VOICE DNA ===
 {voice_section}
 
-=== CRITICAL WRITING RULES ===
-
+=== VOICE CONSTRAINTS ===
 TONE: {tone}. Eye-level, NEVER condescending.
 - Every sentence must pass: "Could this be read as 'I'm better than you'?" If yes, rewrite.
-- Absorb punch lines into paragraph flow (shared observation, NOT guru pronouncement)
-- Use "but because" for humble framing
 
 VOCABULARY:
-- USE: {VOCAB_USE}
-- NEVER USE: {VOCAB_NEVER}
+- PREFERRED: {vocab_use if vocab_use else "Use natural language"}
+- NEVER USE: {vocab_never}
 
-PUNCTUATION:
-- Single dash with space ( - ) for parenthetical. NEVER em dash. NEVER double dash (--)
-- NEVER curly/smart quotes. Always straight quotes.
-- Colon as reveal device: "My response was simple:"
-
-STRUCTURE:
-- The Rule of 3: Numbered frameworks ALWAYS use exactly 3 steps
-- Hook is always ONE line. Never a paragraph.
-- 1-3 lines per paragraph. Never more.
-- Time anchoring: Include specific time reference ("9 years ago" not "years ago")
-- Proof-Through-Specifics: Never claim ("I'm productive"). List evidence.
-
-SENTENCE PATTERNS (use 2-3 per post):
-1. The Reframe: "Doing it all isn't saving money. It's just choosing to pay with your time."
-2. The Punch Line: Ultra-short after build-up. "Zero." / "No doubt."
-3. The Direct Command: "Don't write a single line of code."
-4. The Conditional Conviction: "If [condition], [bold command]."
-5. The "I stopped..." Confession: Lists specific things given up.
-
-ENDING PATTERNS:
-- If the last line delivers clear insight, STOP. Don't force a reframe.
-- Closing questions should be specific and either/or. Never generic "What do you think?"
-- Glue closing question to final paragraph, not staged on its own line.
-
-=== PAST SUCCESSFUL POSTS (mimic this style closely) ===
+=== PAST SUCCESSFUL POSTS (mimic this style) ===
 {past_posts_text}
 
 === GOLDEN RULES FROM PAST PERFORMANCE ===
@@ -151,24 +149,8 @@ ENDING PATTERNS:
 {trend_report[:1000]}
 {retry_instructions}
 
-Now write drafts for ALL THREE platforms:
-
-=== X (TWITTER) ===
-- MAX 280 characters. Hook-heavy. End with engagement question.
-- 1-2 hashtags max.
-
-=== LINKEDIN ===
-- Start with a 1-line hook that makes people click "See More"
-- Then a blank line (creates the fold)
-- 3-5 dense paragraphs (Sample 09 style: tight, no excess white space)
-- End with an engagement CTA (comments)
-- Professional but personal. CEO sharing from the arena.
-- NO bold headers on list items. Inline flow.
-- NO signposting unless the content doesn't demonstrate authority on its own.
-
-=== INSTAGRAM ===
-- 5-slide carousel script (Slide 1: bold hook, Slides 2-4: insights, Slide 5: CTA)
-- Then write the caption
+Now execute. Write platform-native drafts following the Platform Writing Guide above.
+Each platform MUST be distinct — different structure, different length, different energy.
 
 Format EXACTLY like this:
 X: [your X post]
